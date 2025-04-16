@@ -310,42 +310,53 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user = update.effective_user
     
-    # Збереження даних користувача
-    user_data.add_user(user.id, {
+    # Перевірка чи користувач вже існує
+    existing_user = user_data.get_user(user.id)
+    is_new_user = existing_user is None
+    
+    # Оновлення даних користувача
+    user_info = {
         'first_name': user.first_name,
         'last_name': user.last_name,
         'username': user.username,
-        'language_code': user.language_code
-    })
+        'language_code': user.language_code,
+        'last_visit': update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    if is_new_user:
+        user_info['registration_date'] = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+        user_info['orders'] = []
+    
+    user_data.add_user(user.id, user_info)
     
     # Формування повідомлення про нового користувача
-    new_user_message = (
-        f"🔔 Новий користувач почав роботу з ботом:\n\n"
-        f"👤 Інформація про користувача:\n"
-        f"ID: {user.id}\n"
-        f"Ім'я: {user.first_name}"
-    )
-    if user.last_name:
-        new_user_message += f" {user.last_name}"
-    if user.username:
-        new_user_message += f"\nUsername: @{user.username}"
-    if user.language_code:
-        new_user_message += f"\nМова: {user.language_code}"
-    
-    # Додавання інформації про час
-    current_time = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
-    new_user_message += f"\n\n⏰ Час початку: {current_time}"
-    
-    # Відправка повідомлення менеджеру
-    try:
-        await context.bot.send_message(
-            chat_id=MANAGER_CHAT_ID,
-            text=new_user_message,
-            parse_mode='HTML'
+    if is_new_user:
+        new_user_message = (
+            f"🔔 Новий користувач почав роботу з ботом:\n\n"
+            f"👤 Інформація про користувача:\n"
+            f"ID: {user.id}\n"
+            f"Ім'я: {user.first_name}"
         )
-        logger.info(f"Відправлено повідомлення менеджеру про нового користувача: {user.id}")
-    except Exception as e:
-        logger.error(f"Помилка при відправці повідомлення про нового користувача: {str(e)}")
+        if user.last_name:
+            new_user_message += f" {user.last_name}"
+        if user.username:
+            new_user_message += f"\nUsername: @{user.username}"
+        if user.language_code:
+            new_user_message += f"\nМова: {user.language_code}"
+        
+        current_time = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+        new_user_message += f"\n\n⏰ Час початку: {current_time}"
+        
+        # Відправка повідомлення менеджеру про нового користувача
+        try:
+            await context.bot.send_message(
+                chat_id=MANAGER_CHAT_ID,
+                text=new_user_message,
+                parse_mode='HTML'
+            )
+            logger.info(f"Відправлено повідомлення менеджеру про нового користувача: {user.id}")
+        except Exception as e:
+            logger.error(f"Помилка при відправці повідомлення про нового користувача: {str(e)}")
     
     # Очищення даних попереднього замовлення
     context.user_data.clear()
@@ -974,7 +985,7 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Показ списку всіх користувачів бота
+    Показ списку всіх користувачів бота з детальною інформацією
     
     Returns:
         None
@@ -991,11 +1002,22 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "📋 Список користувачів:\n\n"
     for user_id in users:
         user_info = user_data.get_user(user_id)
+        registration_date = user_info.get('registration_date', 'Невідомо')
+        last_visit = user_info.get('last_visit', 'Невідомо')
+        orders_count = len(user_info.get('orders', []))
+        
         message += (
-            f"ID: {user_id}\n"
-            f"Ім'я: {user_info.get('first_name', 'Невідомо')}\n"
-            f"Username: @{user_info.get('username', 'Невідомо')}\n"
-            f"Мова: {user_info.get('language_code', 'Невідомо')}\n"
+            f"👤 ID: {user_id}\n"
+            f"📝 Ім'я: {user_info.get('first_name', 'Невідомо')}"
+        )
+        if user_info.get('last_name'):
+            message += f" {user_info.get('last_name')}"
+        message += (
+            f"\n🔖 Username: @{user_info.get('username', 'Невідомо')}\n"
+            f"🌐 Мова: {user_info.get('language_code', 'Невідомо')}\n"
+            f"📅 Дата реєстрації: {registration_date}\n"
+            f"🕒 Останній візит: {last_visit}\n"
+            f"📦 Кількість замовлень: {orders_count}\n"
             "-------------------\n"
         )
     
@@ -1003,7 +1025,7 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Відправляє список всіх користувачів у форматі Excel файлу"""
-    if str(update.effective_user.id) != MANAGER_CHAT_ID:
+    if str(update.effective_user.id) != str(MANAGER_CHAT_ID):
         await update.message.reply_text("У вас немає прав для використання цієї команди.")
         return
 
