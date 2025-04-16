@@ -36,9 +36,11 @@ class UserData:
                 self.mongo_uri = f"{base_uri}/confetti?{params}"
             else:
                 self.mongo_uri = f"{base_uri}/confetti"
-            logger.info("Додано базу даних 'confetti' до URI")
+            logger.info(f"Додано базу даних 'confetti' до URI: {self.mongo_uri}")
         else:
+            # Якщо база даних вже вказана, просто використовуємо оригінальний URI
             self.mongo_uri = mongo_uri
+            logger.info(f"Використовуємо існуючий URI з базою даних: {self.mongo_uri}")
             
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
@@ -58,9 +60,14 @@ class UserData:
             self.client.admin.command('ping')
             
             # Отримуємо базу даних
-            self.db = self.client.get_database()
+            parsed = urlparse(self.mongo_uri)
+            db_name = parsed.path.lstrip('/')
+            if not db_name:
+                db_name = 'confetti'
+                
+            self.db = self.client[db_name]
             if not self.db:
-                logger.error("Не вдалося отримати базу даних")
+                logger.error(f"Не вдалося отримати базу даних {db_name}")
                 return False
                 
             self.users = self.db.users
