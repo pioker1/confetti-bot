@@ -3,6 +3,7 @@ import os
 from typing import Dict, Optional
 from pymongo import MongoClient
 from pymongo.collection import Collection
+import urllib.parse
 
 class UserData:
     def __init__(self):
@@ -13,9 +14,23 @@ class UserData:
         mongodb_url = os.environ.get('MONGODB_URI')
         if mongodb_url:
             try:
-                self.client = MongoClient(mongodb_url)
+                # Додаємо параметри SSL до URL
+                if '?' in mongodb_url:
+                    mongodb_url += '&ssl=true&ssl_cert_reqs=CERT_NONE'
+                else:
+                    mongodb_url += '?ssl=true&ssl_cert_reqs=CERT_NONE'
+                    
+                self.client = MongoClient(mongodb_url, 
+                                       ssl=True,
+                                       ssl_cert_reqs='CERT_NONE',
+                                       serverSelectionTimeoutMS=5000)
+                                       
+                # Перевіряємо підключення
+                self.client.server_info()
+                
                 self.db = self.client['confetti']
                 self.users_collection: Collection = self.db.users
+                print("Успішно підключено до MongoDB")
             except Exception as e:
                 print(f"Помилка підключення до MongoDB: {e}")
                 self.client = None
