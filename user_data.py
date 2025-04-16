@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pymongo.database import Database
 from pymongo.collection import Collection
-from pymongo.errors import ConnectionError, OperationFailure
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 # Налаштування логування
 logging.basicConfig(
@@ -22,6 +22,10 @@ load_dotenv()
 
 class UserData:
     def __init__(self, mongo_uri: str):
+        if not mongo_uri:
+            logger.error("Не знайдено URI MongoDB")
+            raise ValueError("Не знайдено URI MongoDB")
+            
         self.mongo_uri = mongo_uri
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
@@ -48,8 +52,14 @@ class UserData:
             
             logger.info("Успішно підключено до MongoDB")
             return True
-        except Exception as e:
+        except ServerSelectionTimeoutError as e:
+            logger.error(f"Помилка підключення до MongoDB (таймаут): {str(e)}")
+            return False
+        except PyMongoError as e:
             logger.error(f"Помилка підключення до MongoDB: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Неочікувана помилка при підключенні до MongoDB: {str(e)}")
             return False
 
     def save_conversation_state(self, user_id: int, state: Dict[str, Any]) -> bool:
@@ -63,7 +73,7 @@ class UserData:
             )
             logger.info(f"Збережено стан розмови для користувача {user_id}")
             return True
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка збереження стану розмови: {str(e)}")
             return False
 
@@ -74,7 +84,7 @@ class UserData:
             if state:
                 state.pop('_id', None)  # Видаляємо _id з результату
             return state
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка отримання стану розмови: {str(e)}")
             return None
 
@@ -84,7 +94,7 @@ class UserData:
             self.conversations.delete_one({'user_id': user_id})
             logger.info(f"Очищено стан розмови для користувача {user_id}")
             return True
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка очищення стану розмови: {str(e)}")
             return False
 
@@ -99,7 +109,7 @@ class UserData:
             )
             logger.info(f"Додано/оновлено користувача: {user_id}")
             return True
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка додавання користувача: {str(e)}")
             return False
 
@@ -110,7 +120,7 @@ class UserData:
             if user:
                 user.pop('_id', None)  # Видаляємо _id з результату
             return user
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка отримання користувача: {str(e)}")
             return None
 
@@ -130,16 +140,17 @@ class UserData:
                 upsert=True
             )
             logger.info(f"Збережено контакт користувача {user_id}")
-        except Exception as e:
+            return True
+        except PyMongoError as e:
             logger.error(f"Помилка при збереженні контакту користувача {user_id}: {e}")
-            raise
+            return False
 
     def get_contact(self, user_id: int) -> dict:
         """Отримує контактну інформацію користувача"""
         try:
             user = self.users.find_one({'user_id': user_id})
             return user.get('contact', {}) if user else {}
-        except Exception as e:
+        except PyMongoError as e:
             logger.error(f"Помилка при отриманні контакту користувача {user_id}: {e}")
             return {}
 
@@ -150,7 +161,12 @@ user_data = None
 
 while retry_count < max_retries and user_data is None:
     try:
-        user_data = UserData(os.getenv('MONGODB_URI'))
+        mongo_uri = os.getenv('MONGODB_URI')
+        if not mongo_uri:
+            logger.error("Не знайдено URI MongoDB в змінних середовища")
+            break
+            
+        user_data = UserData(mongo_uri)
         logger.info("Успішно створено екземпляр UserData")
     except Exception as e:
         retry_count += 1
