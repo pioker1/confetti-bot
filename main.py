@@ -395,67 +395,82 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user = update.effective_user
     
-    # Перевірка чи користувач вже існує
-    existing_user = user_data.get_user(user.id)
-    is_new_user = existing_user is None
-    
-    # Оновлення даних користувача
-    user_info = {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'username': user.username,
-        'language_code': user.language_code,
-        'last_visit': update.message.date.strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
-    if is_new_user:
-        user_info['registration_date'] = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
-        user_info['orders'] = []
-    
-    user_data.add_user(user.id, user_info)
-    
-    # Формування повідомлення про нового користувача
-    if is_new_user:
-        new_user_message = (
-            f"🔔 Новий користувач почав роботу з ботом:\n\n"
-            f"👤 Інформація про користувача:\n"
-            f"ID: {user.id}\n"
-            f"Ім'я: {user.first_name}"
-        )
-        if user.last_name:
-            new_user_message += f" {user.last_name}"
-        if user.username:
-            new_user_message += f"\nUsername: @{user.username}"
-        if user.language_code:
-            new_user_message += f"\nМова: {user.language_code}"
+    try:
+        # Перевірка чи користувач вже існує
+        existing_user = user_data.get_user(user.id)
+        is_new_user = existing_user is None
         
-        current_time = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
-        new_user_message += f"\n\n⏰ Час початку: {current_time}"
+        # Оновлення даних користувача
+        user_info = {
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'username': user.username,
+            'language_code': user.language_code,
+            'last_visit': update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+        }
         
-        # Відправка повідомлення менеджеру про нового користувача
-        try:
-            await context.bot.send_message(
-                chat_id=MANAGER_CHAT_ID,
-                text=new_user_message,
-                parse_mode='HTML'
+        if is_new_user:
+            user_info['registration_date'] = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+            user_info['orders'] = []
+            user_info['status'] = 'Активний'
+        else:
+            # Оновлюємо статус користувача, якщо він був заблокований
+            user_info['status'] = 'Активний'
+        
+        user_data.add_user(user.id, user_info)
+        
+        # Формування повідомлення про нового користувача або повернення
+        if is_new_user:
+            new_user_message = (
+                f"🔔 Новий користувач почав роботу з ботом:\n\n"
+                f"👤 Інформація про користувача:\n"
+                f"ID: {user.id}\n"
+                f"Ім'я: {user.first_name}"
             )
-            logger.info(f"Відправлено повідомлення менеджеру про нового користувача: {user.id}")
-        except Exception as e:
-            logger.error(f"Помилка при відправці повідомлення про нового користувача: {str(e)}")
-    
-    # Очищення даних попереднього замовлення
-    context.user_data.clear()
-    # Збереження інформації про користувача
-    context.user_data['user'] = user
-    # Встановлення початкового стану
-    context.user_data['state'] = MAIN_MENU
-    
-    # Відправка привітання користувачу
-    await update.message.reply_text(
-        f"Вітаю, {user.first_name}! 🎉\n"
-        "Я допоможу вам організувати незабутнє свято!"
-    )
-    return await show_main_menu(update, context)
+            if user.last_name:
+                new_user_message += f" {user.last_name}"
+            if user.username:
+                new_user_message += f"\nUsername: @{user.username}"
+            if user.language_code:
+                new_user_message += f"\nМова: {user.language_code}"
+            
+            current_time = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
+            new_user_message += f"\n\n⏰ Час початку: {current_time}"
+            
+            # Відправка повідомлення менеджеру про нового користувача
+            try:
+                await context.bot.send_message(
+                    chat_id=MANAGER_CHAT_ID,
+                    text=new_user_message,
+                    parse_mode='HTML'
+                )
+                logger.info(f"Відправлено повідомлення менеджеру про нового користувача: {user.id}")
+            except Exception as e:
+                logger.error(f"Помилка при відправці повідомлення про нового користувача: {str(e)}")
+        else:
+            # Логування повернення користувача
+            logger.info(f"Користувач {user.id} повернувся до бота")
+        
+        # Очищення даних попереднього замовлення
+        context.user_data.clear()
+        # Збереження інформації про користувача
+        context.user_data['user'] = user
+        # Встановлення початкового стану
+        context.user_data['state'] = MAIN_MENU
+        
+        # Відправка привітання користувачу
+        await update.message.reply_text(
+            f"Вітаю, {user.first_name}! 🎉\n"
+            "Я допоможу вам організувати незабутнє свято!"
+        )
+        return await show_main_menu(update, context)
+        
+    except Exception as e:
+        logger.error(f"Помилка при обробці команди /start: {str(e)}")
+        await update.message.reply_text(
+            "Виникла помилка при запуску бота. Будь ласка, спробуйте ще раз."
+        )
+        return ConversationHandler.END
 
 async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
