@@ -90,5 +90,5 @@ ADDITIONAL_SERVICES = {
 MANAGER_INFO = {
     'phone': '+380123456789',
     'telegram': 'https://t.me/manager_username',
-    'name': 'Олена'
+    'name': 'Поліна'
 } 
