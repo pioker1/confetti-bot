@@ -42,6 +42,10 @@ class UserData:
             self.mongo_uri = mongo_uri
             logger.info(f"Використовуємо існуючий URI з базою даних: {self.mongo_uri}")
             
+        # Видаляємо подвійні слеші з URI
+        self.mongo_uri = self.mongo_uri.replace('//', '/')
+        logger.info(f"Остаточний URI: {self.mongo_uri}")
+            
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
         self.users: Optional[Collection] = None
@@ -65,6 +69,7 @@ class UserData:
             if not db_name:
                 db_name = 'confetti'
                 
+            logger.info(f"Спроба підключення до бази даних: {db_name}")
             self.db = self.client[db_name]
             if not self.db:
                 logger.error(f"Не вдалося отримати базу даних {db_name}")
