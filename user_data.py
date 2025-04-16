@@ -85,15 +85,23 @@ class UserData:
                 
             logger.info(f"Спроба підключення до бази даних: {db_name}")
             self.db = self.client[db_name]
-            if not self.db:
-                logger.error(f"Не вдалося отримати базу даних {db_name}")
+            
+            # Перевіряємо, чи існує база даних
+            try:
+                self.db.command('ping')
+            except Exception as e:
+                logger.error(f"База даних {db_name} не існує або недоступна: {str(e)}")
                 return False
                 
             self.users = self.db.users
             self.conversations = self.db.conversations
             
-            if not self.users or not self.conversations:
-                logger.error("Не вдалося отримати колекції")
+            # Перевіряємо, чи існують колекції
+            try:
+                self.users.find_one()
+                self.conversations.find_one()
+            except Exception as e:
+                logger.error(f"Помилка доступу до колекцій: {str(e)}")
                 return False
             
             # Створюємо індекси
