@@ -42,8 +42,22 @@ class UserData:
             self.mongo_uri = mongo_uri
             logger.info(f"Використовуємо існуючий URI з базою даних: {self.mongo_uri}")
             
-        # Видаляємо подвійні слеші з URI
-        self.mongo_uri = self.mongo_uri.replace('//', '/')
+        # Видаляємо подвійні слеші з URI, зберігаючи протокол
+        if self.mongo_uri.startswith('mongodb+srv://'):
+            # Зберігаємо протокол
+            protocol = 'mongodb+srv://'
+            rest = self.mongo_uri[len(protocol):]
+            # Видаляємо подвійні слеші з решти URI
+            rest = rest.replace('//', '/')
+            self.mongo_uri = protocol + rest
+        elif self.mongo_uri.startswith('mongodb://'):
+            # Зберігаємо протокол
+            protocol = 'mongodb://'
+            rest = self.mongo_uri[len(protocol):]
+            # Видаляємо подвійні слеші з решти URI
+            rest = rest.replace('//', '/')
+            self.mongo_uri = protocol + rest
+            
         logger.info(f"Остаточний URI: {self.mongo_uri}")
             
         self.client: Optional[MongoClient] = None
