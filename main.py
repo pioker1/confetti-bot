@@ -4,7 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
-    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO
+    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES
 )
 from user_data import user_data
 from datetime import datetime
@@ -48,6 +48,16 @@ def create_other_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(BACK_BUTTON)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_manager_contact_message(city: str) -> str:
+    """Формує повідомлення з контактами менеджера для конкретного міста"""
+    manager = MANAGER_INFO[city]
+    message_template = MANAGER_CONTACT_MESSAGES[city]
+    return message_template.format(
+        phone=manager['phone'],
+        name=manager['name'],
+        telegram=manager['telegram']
+    )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка команди /start"""
@@ -140,14 +150,10 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if event_type == CONTACT_MANAGER_BUTTON:
         # Показуємо контакти менеджера
-        manager = MANAGER_INFO[city]
         await update.message.reply_text(
-            f"📞 Контакти менеджера ({city}):\n\n"
-            f"Ім'я: {manager['name']}\n"
-            f"Телефон: {manager['phone']}\n"
-            f"Telegram: {manager['telegram']}"
+            get_manager_contact_message(city),
+            reply_markup=create_other_keyboard()
         )
-        # Залишаємося в поточному стані
         return CHOOSING_EVENT_TYPE
     
     if event_type not in EVENT_TYPES:
