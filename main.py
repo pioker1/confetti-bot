@@ -122,52 +122,24 @@ def get_current_choices(context: ContextTypes.DEFAULT_TYPE) -> str:
     return choices_text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обробка команди /start"""
+    """Початок розмови та повернення до головного меню"""
     user = update.effective_user
-    user_id = user.id
     
-    # Перевіряємо наявність user_data
-    if user_data is None:
-        logger.error("Помилка: user_data не ініціалізовано")
-        await update.message.reply_text(
-            "На жаль, зараз виникли технічні проблеми. Будь ласка, спробуйте пізніше."
-        )
-        return ConversationHandler.END
+    # Очищаємо стан розмови
+    user_data.clear_conversation_state(user.id)
     
-    # Перевіряємо, чи є збережений стан розмови
-    saved_state = user_data.get_conversation_state(user_id)
-    if saved_state and 'choices' in saved_state:
-        # Відновлюємо стан розмови
-        context.user_data.update(saved_state)
-        last_state = saved_state.get('last_state')
-        
-        if last_state == CHOOSING_EVENT_TYPE:
-            await update.message.reply_text(
-                "З поверненням! 👋\n"
-                "Оберіть тип події:",
-                reply_markup=create_event_type_keyboard()
-            )
-            return CHOOSING_EVENT_TYPE
-        elif last_state == CHOOSING_LOCATION:
-            event_type = next((choice['value'] for choice in saved_state['choices'] 
-                             if choice['type'] == "Тип події"), None)
-            if event_type:
-                await update.message.reply_text(
-                    "З поверненням! 👋\n"
-                    "Оберіть локацію для події:",
-                    reply_markup=create_location_keyboard(event_type)
-                )
-                return CHOOSING_LOCATION
+    # Зберігаємо базову інформацію про користувача
+    user_info = {
+        'username': user.username,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'last_interaction': datetime.now().isoformat()
+    }
+    user_data.add_user(user.id, user_info)
     
-    # Очищаємо попередні дані користувача
-    context.user_data.clear()
-    initialize_user_choices(context)
-    
-    # Відправляємо привітання
     await update.message.reply_text(
-        "Вітаємо! 👋\n"
-        "Я бот для замовлення послуг аніматора.\n"
-        "Оберіть місто, де відбудеться подія:",
+        "🎉 Вітаємо у Confetti - вашому провіднику у світ незабутніх свят! "
+        "Оберіть місто, де ви хочете організувати свято:",
         reply_markup=create_city_keyboard()
     )
     
