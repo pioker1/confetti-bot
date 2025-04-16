@@ -413,9 +413,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_info['registration_date'] = update.message.date.strftime("%Y-%m-%d %H:%M:%S")
             user_info['orders'] = []
             user_info['status'] = 'Активний'
+            # Очищення даних тільки для нового користувача
+            context.user_data.clear()
         else:
             # Оновлюємо статус користувача, якщо він був заблокований
             user_info['status'] = 'Активний'
+            # Зберігаємо попередні дані користувача
+            if 'state' not in context.user_data:
+                context.user_data['state'] = MAIN_MENU
         
         user_data.add_user(user.id, user_info)
         
@@ -451,18 +456,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Логування повернення користувача
             logger.info(f"Користувач {user.id} повернувся до бота")
         
-        # Очищення даних попереднього замовлення
-        context.user_data.clear()
         # Збереження інформації про користувача
         context.user_data['user'] = user
-        # Встановлення початкового стану
-        context.user_data['state'] = MAIN_MENU
         
         # Відправка привітання користувачу
-        await update.message.reply_text(
-            f"Вітаю, {user.first_name}! 🎉\n"
-            "Я допоможу вам організувати незабутнє свято!"
-        )
+        if is_new_user:
+            await update.message.reply_text(
+                f"Вітаю, {user.first_name}! 🎉\n"
+                "Я допоможу вам організувати незабутнє свято!"
+            )
+        else:
+            # Перевіряємо, чи є незавершене замовлення
+            if 'location' in context.user_data:
+                await update.message.reply_text(
+                    f"Вітаю з поверненням, {user.first_name}! 🎉\n"
+                    "Ви можете продовжити оформлення замовлення з того місця, де зупинилися."
+                )
+            else:
+                await update.message.reply_text(
+                    f"Вітаю з поверненням, {user.first_name}! 🎉\n"
+                    "Я допоможу вам організувати незабутнє свято!"
+                )
+        
         return await show_main_menu(update, context)
         
     except Exception as e:
