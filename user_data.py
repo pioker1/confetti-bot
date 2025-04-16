@@ -28,15 +28,15 @@ class UserData:
                 self.users = {}
 
     def save_data(self):
-        """Збереження даних в файл та змінну оточення"""
-        # Зберігаємо в файл для локальної розробки
-        with open(self.filename, 'w', encoding='utf-8') as file:
-            json.dump(self.users, file, ensure_ascii=False, indent=2)
-        
-        # Зберігаємо в змінну оточення для Heroku
-        users_json = json.dumps(self.users, ensure_ascii=False)
+        """Збереження даних в файл або змінну оточення"""
         if 'HEROKU' in os.environ:
+            # На Heroku зберігаємо тільки в змінну оточення
+            users_json = json.dumps(self.users, ensure_ascii=False)
             os.environ['USERS_DATA'] = users_json
+        else:
+            # Локально зберігаємо в файл
+            with open(self.filename, 'w', encoding='utf-8') as file:
+                json.dump(self.users, file, ensure_ascii=False, indent=2)
 
     def add_user(self, user_id: str, user_data: dict):
         """Додавання нового користувача"""
