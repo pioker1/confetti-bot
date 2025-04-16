@@ -12,9 +12,14 @@ class UserData:
         # Підключення до MongoDB
         mongodb_url = os.environ.get('MONGODB_URI')
         if mongodb_url:
-            self.client = MongoClient(mongodb_url)
-            self.db = self.client['confetti']  # Явно вказуємо назву бази даних
-            self.users_collection: Collection = self.db.users
+            try:
+                self.client = MongoClient(mongodb_url)
+                self.db = self.client['confetti']
+                self.users_collection: Collection = self.db.users
+            except Exception as e:
+                print(f"Помилка підключення до MongoDB: {e}")
+                self.client = None
+                self.users_collection = None
         else:
             self.client = None
             self.users_collection = None
@@ -23,11 +28,15 @@ class UserData:
 
     def load_data(self):
         """Завантаження даних з MongoDB або локального файлу"""
-        if self.users_collection:
-            # Завантаження з MongoDB
-            cursor = self.users_collection.find({})
-            self.users = {str(doc['_id']): {k: v for k, v in doc.items() if k != '_id'} 
-                         for doc in cursor}
+        if self.users_collection is not None:
+            try:
+                # Завантаження з MongoDB
+                cursor = self.users_collection.find({})
+                self.users = {str(doc['_id']): {k: v for k, v in doc.items() if k != '_id'} 
+                            for doc in cursor}
+            except Exception as e:
+                print(f"Помилка завантаження даних з MongoDB: {e}")
+                self.users = {}
         else:
             # Завантаження з локального файлу
             if os.path.exists(self.filename):
@@ -39,14 +48,20 @@ class UserData:
 
     def save_data(self):
         """Збереження даних в MongoDB або локальний файл"""
-        if self.users_collection:
-            # Зберігання в MongoDB
-            for user_id, user_data in self.users.items():
-                self.users_collection.update_one(
-                    {'_id': user_id},
-                    {'$set': user_data},
-                    upsert=True
-                )
+        if self.users_collection is not None:
+            try:
+                # Зберігання в MongoDB
+                for user_id, user_data in self.users.items():
+                    self.users_collection.update_one(
+                        {'_id': user_id},
+                        {'$set': user_data},
+                        upsert=True
+                    )
+            except Exception as e:
+                print(f"Помилка збереження даних в MongoDB: {e}")
+                # Якщо помилка - зберігаємо локально
+                with open(self.filename, 'w', encoding='utf-8') as file:
+                    json.dump(self.users, file, ensure_ascii=False, indent=2)
         else:
             # Зберігання в локальний файл
             with open(self.filename, 'w', encoding='utf-8') as file:
@@ -75,10 +90,12 @@ class UserData:
         """Видалення користувача"""
         if str(user_id) in self.users:
             del self.users[str(user_id)]
-            if self.users_collection:
-                self.users_collection.delete_one({'_id': str(user_id)})
-            else:
-                self.save_data()
+            if self.users_collection is not None:
+                try:
+                    self.users_collection.delete_one({'_id': str(user_id)})
+                except Exception as e:
+                    print(f"Помилка видалення користувача з MongoDB: {e}")
+            self.save_data()
 
 # Створюємо глобальний екземпляр
 user_data = UserData() 
