@@ -2,7 +2,7 @@ import logging
 import os
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from config import TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES
 from user_data import user_data
 from datetime import datetime
 
@@ -14,12 +14,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Стани розмови
-MAIN_MENU, CHOOSING_CITY = range(2)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE = range(2)
+
+# Кнопка "Назад"
+BACK_BUTTON = "⬅️ Назад"
 
 def create_city_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з доступними містами"""
     keyboard = [[KeyboardButton(city)] for city in CITIES]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+def create_event_type_keyboard() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з типами подій"""
+    keyboard = []
+    # Додаємо типи подій по 2 в рядок
+    for i in range(0, len(EVENT_TYPES), 2):
+        row = [KeyboardButton(EVENT_TYPES[i])]
+        if i + 1 < len(EVENT_TYPES):
+            row.append(KeyboardButton(EVENT_TYPES[i + 1]))
+        keyboard.append(row)
+    # Додаємо кнопку "Назад" в останній рядок
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка команди /start"""
@@ -81,20 +97,48 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if city not in CITIES:
         await update.message.reply_text(
             "Будь ласка, оберіть місто зі списку:",
-            reply_markup=ReplyKeyboardMarkup(
-                [[KeyboardButton(city)] for city in CITIES],
-                resize_keyboard=True
-            )
+            reply_markup=create_city_keyboard()
         )
         return CHOOSING_CITY
     
     # Зберігаємо вибір міста
-    user_id = str(update.effective_user.id)
-    user_data.update_user(user_id, {'city': city})
+    context.user_data['city'] = city
     
+    # Показуємо типи подій
     await update.message.reply_text(
-        f"Чудово! Ви обрали місто {city}.\n"
-        "Скоро ми додамо нові функції для продовження оформлення замовлення."
+        f"🏙 Ви обрали місто: {city}\n"
+        "Тепер оберіть тип події:",
+        reply_markup=create_event_type_keyboard()
+    )
+    
+    return CHOOSING_EVENT_TYPE
+
+async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка вибору типу події"""
+    event_type = update.message.text
+    
+    if event_type == BACK_BUTTON:
+        # Повертаємося до вибору міста
+        await update.message.reply_text(
+            "Оберіть місто, де відбудеться подія:",
+            reply_markup=create_city_keyboard()
+        )
+        return CHOOSING_CITY
+    
+    if event_type not in EVENT_TYPES:
+        await update.message.reply_text(
+            "Будь ласка, оберіть тип події зі списку:",
+            reply_markup=create_event_type_keyboard()
+        )
+        return CHOOSING_EVENT_TYPE
+    
+    # Зберігаємо вибір типу події
+    context.user_data['event_type'] = event_type
+    
+    # Тут буде наступний крок (буде додано пізніше)
+    await update.message.reply_text(
+        f"🎉 Ви обрали: {event_type}\n"
+        "Наступний крок буде додано незабаром..."
     )
     
     return ConversationHandler.END
@@ -115,6 +159,7 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city_chosen)],
+            CHOOSING_EVENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
