@@ -4,7 +4,8 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, MANAGER_CHAT_ID, CITIES, EVENT_TYPES, LOCATIONS, 
-    DURATIONS, ADDITIONAL_SERVICES, BASE_PRICES, DURATION_MULTIPLIERS
+    DURATIONS, ADDITIONAL_SERVICES, BASE_PRICES, DURATION_MULTIPLIERS,
+    MANAGER_INFO
 )
 from user_data import user_data
 from datetime import datetime
@@ -21,13 +22,21 @@ logger = logging.getLogger(__name__)
 # Кожен стан відповідає певному етапу взаємодії
 MAIN_MENU, CONTACT_MANAGER, SERVICES_INFO, VIEWING_SERVICE = range(4)
 (CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION, 
- CHOOSING_DURATION, CHOOSING_SERVICES, ENTERING_CUSTOM_DURATION) = range(4, 10)
+ CHOOSING_DURATION, CHOOSING_SERVICES, ENTERING_CUSTOM_DURATION,
+ WRITING_FEEDBACK, WRITING_COMPLAINT, WRITING_COMMENT) = range(4, 13)
 
 # Опції головного меню з відповідними емодзі
 MAIN_MENU_OPTIONS = {
     'contact_manager': '👩‍💼 Зв\'язатись з менеджером',
     'services_info': '📝 Дізнатись про послуги',
     'make_order': '🎉 Зробити замовлення'
+}
+
+# Контактна інформація менеджера
+MANAGER_INFO = {
+    'phone': '+380123456789',
+    'telegram': 'https://t.me/manager_username',
+    'name': 'Олена'
 }
 
 # Детальний опис послуг з зображеннями та описом
@@ -191,13 +200,75 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Обробка запиту на зв'язок з менеджером
     
     Returns:
-        int: Стан MAIN_MENU
+        int: Стан CONTACT_MANAGER
     """
+    keyboard = [
+        [KeyboardButton('✍️ Написати відгук')],
+        [KeyboardButton('⚠️ Написати скаргу')],
+        [KeyboardButton('💬 Написати коментар')],
+        [KeyboardButton('⬅️ Головне меню')]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    message = (
+        f"👋 Вітаю! Я {MANAGER_INFO['name']}, ваш менеджер.\n\n"
+        f"📱 Телефон: {MANAGER_INFO['phone']}\n"
+        f"📨 Telegram: {MANAGER_INFO['telegram']}\n\n"
+        "Оберіть, будь ласка, що вас цікавить:"
+    )
+    
+    await update.message.reply_text(message, reply_markup=reply_markup)
+    return CONTACT_MANAGER
+
+async def handle_manager_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обробка вибору опції зв'язку з менеджером
+    
+    Returns:
+        int: Відповідний стан розмови
+    """
+    choice = update.message.text
+    
+    if choice == '⬅️ Головне меню':
+        return await show_main_menu(update, context)
+    
+    if choice == '✍️ Написати відгук':
+        context.user_data['feedback_type'] = 'відгук'
+        await update.message.reply_text(
+            "Будь ласка, напишіть ваш відгук. Він буде надіслано менеджеру."
+        )
+        return WRITING_FEEDBACK
+    
+    if choice == '⚠️ Написати скаргу':
+        context.user_data['feedback_type'] = 'скарга'
+        await update.message.reply_text(
+            "Будь ласка, опишіть вашу скаргу. Вона буде надіслана менеджеру."
+        )
+        return WRITING_COMPLAINT
+    
+    if choice == '💬 Написати коментар':
+        context.user_data['feedback_type'] = 'коментар'
+        await update.message.reply_text(
+            "Будь ласка, напишіть ваш коментар. Він буде надіслано менеджеру."
+        )
+        return WRITING_COMMENT
+    
+    return CONTACT_MANAGER
+
+async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обробка відгуку/скарги/коментаря користувача
+    
+    Returns:
+        int: Стан CONTACT_MANAGER
+    """
+    feedback_type = context.user_data.get('feedback_type', 'повідомлення')
     user = update.effective_user
+    message = update.message.text
     
     # Формування повідомлення для менеджера
     manager_message = (
-        f"💬 Запит на зв'язок від користувача:\n\n"
+        f"📨 Новий {feedback_type} від користувача:\n\n"
         f"👤 Інформація про користувача:\n"
         f"ID: {user.id}\n"
         f"Ім'я: {user.first_name}"
@@ -207,18 +278,26 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.username:
         manager_message += f"\nUsername: @{user.username}"
     
-    # Відправка повідомлення менеджеру
-    await context.bot.send_message(
-        chat_id=MANAGER_CHAT_ID,
-        text=manager_message
-    )
+    manager_message += f"\n\n📝 {feedback_type.capitalize()}:\n{message}"
     
-    # Відправка підтвердження користувачу
-    await update.message.reply_text(
-        "Дякуємо за звернення! Наш менеджер зв'яжеться з вами найближчим часом.\n"
-        "А поки ви можете ознайомитись з нашими послугами або оформити замовлення."
-    )
-    return await show_main_menu(update, context)
+    # Відправка повідомлення менеджеру
+    try:
+        await context.bot.send_message(
+            chat_id=MANAGER_CHAT_ID,
+            text=manager_message
+        )
+        await update.message.reply_text(
+            f"Дякуємо! Ваш {feedback_type} надіслано менеджеру.\n"
+            "Він зв'яжеться з вами найближчим часом."
+        )
+    except Exception as e:
+        logger.error(f"Помилка при відправці {feedback_type}: {str(e)}")
+        await update.message.reply_text(
+            f"Виникла помилка при відправці {feedback_type}. "
+            "Будь ласка, спробуйте пізніше."
+        )
+    
+    return await contact_manager(update, context)
 
 async def services_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -244,7 +323,7 @@ async def services_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Створення клавіатури з кнопками послуг
     keyboard = []
-    for service in EVENT_TYPES:  # Використовуємо EVENT_TYPES з config.py
+    for service in EVENT_TYPES:
         keyboard.append([KeyboardButton(service)])
     keyboard.append([KeyboardButton('⬅️ Головне меню')])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1179,6 +1258,10 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)],
+            CONTACT_MANAGER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_manager_contact)],
+            WRITING_FEEDBACK: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_feedback)],
+            WRITING_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_feedback)],
+            WRITING_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_feedback)],
             VIEWING_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, show_service_details)],
             CHOOSING_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city_chosen)],
             CHOOSING_EVENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen)],
