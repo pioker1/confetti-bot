@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO
 )
 from user_data import user_data
 from datetime import datetime
@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION = range(3)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION, CHOOSING_THEME = range(4)
 
 # Кнопки
 BACK_BUTTON = "⬅️ Назад"
@@ -64,6 +64,21 @@ def create_other_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(CONTACT_MANAGER_BUTTON)],
         [KeyboardButton(BACK_BUTTON)]
     ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def create_theme_keyboard() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з тематиками свят"""
+    keyboard = []
+    # Додаємо тематики по 2 в рядок
+    for i in range(0, len(THEMES) - 1, 2):  # -1 щоб не включати "Зв'язатись з менеджером" в пари
+        row = [KeyboardButton(THEMES[i])]
+        if i + 1 < len(THEMES) - 1:  # -1 з тієї ж причини
+            row.append(KeyboardButton(THEMES[i + 1]))
+        keyboard.append(row)
+    # Додаємо "Зв'язатись з менеджером" окремим рядком
+    keyboard.append([KeyboardButton(THEMES[-1])])
+    # Додаємо кнопку "Назад"
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_manager_contact_message(city: str) -> str:
@@ -287,7 +302,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Зберігаємо вибір локації
     add_choice(context, "Локація", location)
-    await save_state(update, context, CHOOSING_LOCATION)
+    await save_state(update, context, CHOOSING_THEME)
     
     # Якщо обрано "Інше", показуємо додаткові опції
     if location == '📍 Інше':
@@ -298,10 +313,54 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return CHOOSING_EVENT_TYPE
     
-    # Для всіх інших локацій
+    # Для всіх інших локацій переходимо до вибору тематики
     await update.message.reply_text(
-        f"{LOCATION_INFO[city][location]}\n\n"
-        "Наступний крок буде додано незабаром..."
+        "Оберіть тематику свята:",
+        reply_markup=create_theme_keyboard()
+    )
+    
+    return CHOOSING_THEME
+
+async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка вибору тематики"""
+    theme = update.message.text
+    
+    if theme == BACK_BUTTON:
+        # Видаляємо останній вибір
+        remove_last_choice(context)
+        await save_state(update, context, CHOOSING_LOCATION)
+        event_type = next((choice['value'] for choice in context.user_data['choices'] 
+                         if choice['type'] == "Тип події"), None)
+        await update.message.reply_text(
+            "Оберіть локацію для події:",
+            reply_markup=create_location_keyboard(event_type)
+        )
+        return CHOOSING_LOCATION
+    
+    if theme == '📞 Зв\'язатись з менеджером':
+        city = next((choice['value'] for choice in context.user_data['choices'] 
+                    if choice['type'] == "Місто"), None)
+        await update.message.reply_text(
+            get_manager_contact_message(city),
+            reply_markup=create_theme_keyboard()
+        )
+        return CHOOSING_THEME
+    
+    if theme not in THEMES:
+        await update.message.reply_text(
+            "Будь ласка, оберіть тематику зі списку:",
+            reply_markup=create_theme_keyboard()
+        )
+        return CHOOSING_THEME
+    
+    # Зберігаємо вибір тематики
+    add_choice(context, "Тематика", theme)
+    
+    # Показуємо опис обраної тематики та завершуємо розмову
+    await update.message.reply_text(
+        f"✨ {theme}\n\n"
+        f"{THEME_INFO[theme]}\n\n"
+        "Наш менеджер зв'яжеться з вами найближчим часом для уточнення деталей!"
     )
     
     return ConversationHandler.END
@@ -337,6 +396,7 @@ def main():
             CHOOSING_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city_chosen)],
             CHOOSING_EVENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen)],
             CHOOSING_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen)],
+            CHOOSING_THEME: [MessageHandler(filters.TEXT & ~filters.COMMAND, theme_chosen)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
