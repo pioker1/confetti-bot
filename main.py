@@ -2,8 +2,9 @@ import logging
 import os
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from config import TELEGRAM_BOT_TOKEN, CITIES
+from config import TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID
 from user_data import user_data
+from datetime import datetime
 
 # Налаштування логування
 logging.basicConfig(
@@ -18,35 +19,52 @@ MAIN_MENU, CHOOSING_CITY = range(2)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка команди /start"""
     user = update.effective_user
+    user_id = user.id
     
-    # Збираємо інформацію про користувача
-    user_info = {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'username': user.username,
-        'language_code': user.language_code,
-        'last_visit': update.message.date.strftime("%Y-%m-%d %H:%M:%S"),
-        'registration_date': update.message.date.strftime("%Y-%m-%d %H:%M:%S"),
-        'status': 'Активний'
-    }
+    # Перевіряємо наявність user_data
+    if user_data is None:
+        logger.error("Помилка: user_data не ініціалізовано")
+        await update.message.reply_text(
+            "На жаль, зараз виникли технічні проблеми. Будь ласка, спробуйте пізніше."
+        )
+        return ConversationHandler.END
     
-    # Зберігаємо інформацію про користувача
-    user_data.add_user(str(user.id), user_info)
+    # Перевіряємо, чи користувач вже існує
+    existing_user = user_data.get_user(user_id)
+    if not existing_user:
+        # Створюємо нового користувача
+        user_info = {
+            'user_id': user_id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'created_at': datetime.now().isoformat()
+        }
+        user_data.add_user(user_id, user_info)
+        logger.info(f"Створено нового користувача: {user_id}")
+        
+        # Відправляємо повідомлення менеджеру про нового користувача
+        if MANAGER_CHAT_ID:
+            try:
+                await context.bot.send_message(
+                    chat_id=MANAGER_CHAT_ID,
+                    text=f"🆕 Новий користувач:\n"
+                         f"ID: {user_id}\n"
+                         f"Username: @{user.username if user.username else 'немає'}\n"
+                         f"Ім'я: {user.first_name} {user.last_name if user.last_name else ''}"
+                )
+            except Exception as e:
+                logger.error(f"Помилка при відправці повідомлення менеджеру: {e}")
+    
+    # Очищаємо попередні дані користувача
+    context.user_data.clear()
     
     # Відправляємо привітання
     await update.message.reply_text(
-        f"Вітаю, {user.first_name}! 🎉\n"
-        "Я допоможу вам організувати незабутнє свято!\n\n"
-        "Оберіть місто, де буде проходити свято:"
-    )
-    
-    # Створюємо клавіатуру з містами
-    keyboard = [[KeyboardButton(city)] for city in CITIES]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    
-    await update.message.reply_text(
-        "Оберіть місто:",
-        reply_markup=reply_markup
+        "Вітаємо! 👋\n"
+        "Я бот для замовлення послуг аніматора.\n"
+        "Оберіть місто, де відбудеться подія:",
+        reply_markup=create_city_keyboard()
     )
     
     return CHOOSING_CITY
