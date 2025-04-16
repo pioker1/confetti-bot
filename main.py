@@ -244,7 +244,7 @@ async def services_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Створення клавіатури з кнопками послуг
     keyboard = []
-    for service in SERVICE_DETAILS.keys():
+    for service in EVENT_TYPES:  # Використовуємо EVENT_TYPES з config.py
         keyboard.append([KeyboardButton(service)])
     keyboard.append([KeyboardButton('⬅️ Головне меню')])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -269,8 +269,11 @@ async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYP
     if service_name == '⬅️ Головне меню':
         return await show_main_menu(update, context)
     
-    if service_name in SERVICE_DETAILS:
-        service = SERVICE_DETAILS[service_name]
+    if service_name in EVENT_TYPES:  # Використовуємо EVENT_TYPES з config.py
+        service = SERVICE_DETAILS.get(service_name, {
+            'description': 'Опис послуги тимчасово недоступний',
+            'image': 'images/1.png'
+        })
         
         # Відправка зображення послуги
         try:
