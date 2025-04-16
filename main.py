@@ -7,6 +7,7 @@ from config import (
     DURATIONS, ADDITIONAL_SERVICES, BASE_PRICES, DURATION_MULTIPLIERS
 )
 from user_data import user_data
+from location_calculator import LocationCalculator
 
 # Налаштування логування для відстеження роботи бота
 logging.basicConfig(
@@ -55,6 +56,9 @@ SERVICE_DETAILS = {
         'image': 'images/1.png'  # Шлях до локального файлу
     }
 }
+
+# Ініціалізація калькулятора таксі
+taxi_calculator = LocationCalculator()
 
 def calculate_total_price(location, duration, services):
     """
