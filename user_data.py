@@ -96,17 +96,35 @@ class UserData:
             self.users = self.db.users
             self.conversations = self.db.conversations
             
-            # Перевіряємо, чи існують колекції
+            # Видаляємо старі індекси, якщо вони існують
             try:
-                self.users.find_one()
-                self.conversations.find_one()
-            except Exception as e:
-                logger.error(f"Помилка доступу до колекцій: {str(e)}")
-                return False
+                self.users.drop_index('user_id_1')
+                logger.info("Старий індекс users.user_id видалено")
+            except Exception:
+                logger.info("Індекс users.user_id не існує")
+                
+            try:
+                self.conversations.drop_index('user_id_1')
+                logger.info("Старий індекс conversations.user_id видалено")
+            except Exception:
+                logger.info("Індекс conversations.user_id не існує")
             
-            # Створюємо індекси
-            self.users.create_index('user_id', unique=True)
-            self.conversations.create_index('user_id', unique=True)
+            # Створюємо нові індекси з частковим фільтром
+            try:
+                self.users.create_index(
+                    [('user_id', 1)],
+                    unique=True,
+                    partialFilterExpression={'user_id': {'$type': 'number'}}
+                )
+                self.conversations.create_index(
+                    [('user_id', 1)],
+                    unique=True,
+                    partialFilterExpression={'user_id': {'$type': 'number'}}
+                )
+                logger.info("Нові індекси успішно створено")
+            except Exception as e:
+                logger.error(f"Помилка створення індексів: {str(e)}")
+                return False
             
             logger.info(f"Успішно підключено до MongoDB, база даних: {self.db.name}")
             return True
