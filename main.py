@@ -17,11 +17,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE = range(2)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION = range(3)
 
 # Кнопки
 BACK_BUTTON = "⬅️ Назад"
 CONTACT_MANAGER_BUTTON = "📞 Зв'язатися з менеджером"
+
+# Локації для різних типів подій
+LOCATIONS = {
+    '🎂 День народження': [
+        '🏠 Вдома',
+        '🍽 Ресторан/Кафе',
+        '🏫 Садочок/Школа',
+        '🏰 Заміський комплекс',
+        '📍 Інше'
+    ],
+    '🎓 Випускний': [
+        '🍽 Ресторан/Кафе',
+        '🏫 Садочок/Школа',
+        '🏰 Заміський комплекс',
+        '📍 Інше'
+    ]
+}
 
 def create_city_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з доступними містами"""
@@ -38,6 +55,20 @@ def create_event_type_keyboard() -> ReplyKeyboardMarkup:
             row.append(KeyboardButton(EVENT_TYPES[i + 1]))
         keyboard.append(row)
     # Додаємо кнопку "Назад" в останній рядок
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def create_location_keyboard(event_type: str) -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з локаціями для конкретного типу події"""
+    locations = LOCATIONS.get(event_type, [])
+    keyboard = []
+    # Додаємо локації по 2 в рядок
+    for i in range(0, len(locations), 2):
+        row = [KeyboardButton(locations[i])]
+        if i + 1 < len(locations):
+            row.append(KeyboardButton(locations[i + 1]))
+        keyboard.append(row)
+    # Додаємо кнопку "Назад"
     keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -103,32 +134,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         )
         return ConversationHandler.END
     
-    # Перевіряємо, чи користувач вже існує
-    existing_user = user_data.get_user(user_id)
-    if not existing_user:
-        # Створюємо нового користувача
-        user_info = {
-            'user_id': user_id,
-            'username': user.username,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'created_at': datetime.now().isoformat()
-        }
-        user_data.add_user(user_id, user_info)
-        logger.info(f"Створено нового користувача: {user_id}")
+    # Перевіряємо, чи є збережений стан розмови
+    saved_state = user_data.get_conversation_state(user_id)
+    if saved_state and 'choices' in saved_state:
+        # Відновлюємо стан розмови
+        context.user_data.update(saved_state)
+        last_state = saved_state.get('last_state')
         
-        # Відправляємо повідомлення менеджеру про нового користувача
-        if MANAGER_CHAT_ID:
-            try:
-                await context.bot.send_message(
-                    chat_id=MANAGER_CHAT_ID,
-                    text=f"🆕 Новий користувач:\n"
-                         f"ID: {user_id}\n"
-                         f"Username: @{user.username if user.username else 'немає'}\n"
-                         f"Ім'я: {user.first_name} {user.last_name if user.last_name else ''}"
+        if last_state == CHOOSING_EVENT_TYPE:
+            await update.message.reply_text(
+                "З поверненням! 👋\n"
+                "Оберіть тип події:",
+                reply_markup=create_event_type_keyboard()
+            )
+            return CHOOSING_EVENT_TYPE
+        elif last_state == CHOOSING_LOCATION:
+            event_type = next((choice['value'] for choice in saved_state['choices'] 
+                             if choice['type'] == "Тип події"), None)
+            if event_type:
+                await update.message.reply_text(
+                    "З поверненням! 👋\n"
+                    "Оберіть локацію для події:",
+                    reply_markup=create_location_keyboard(event_type)
                 )
-            except Exception as e:
-                logger.error(f"Помилка при відправці повідомлення менеджеру: {e}")
+                return CHOOSING_LOCATION
     
     # Очищаємо попередні дані користувача
     context.user_data.clear()
@@ -157,11 +186,11 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     # Зберігаємо вибір міста
     add_choice(context, "Місто", city)
+    await save_state(update, context, CHOOSING_EVENT_TYPE)
     
-    # Показуємо типи подій та поточні вибори
+    # Показуємо типи подій
     await update.message.reply_text(
-        f"{get_current_choices(context)}\n"
-        "Тепер оберіть тип події:",
+        "Оберіть тип події:",
         reply_markup=create_event_type_keyboard()
     )
     
@@ -176,19 +205,15 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         last_choice = remove_last_choice(context)
         if last_choice:
             if last_choice['type'] == "Місто":
-                # Повертаємося до вибору міста
+                await save_state(update, context, CHOOSING_CITY)
                 await update.message.reply_text(
-                    f"{get_current_choices(context)}\n"
                     "Оберіть місто, де відбудеться подія:",
                     reply_markup=create_city_keyboard()
                 )
                 return CHOOSING_CITY
             else:
-                # Повертаємося до вибору типу події
-                city = next((choice['value'] for choice in context.user_data['choices'] 
-                           if choice['type'] == "Місто"), None)
+                await save_state(update, context, CHOOSING_EVENT_TYPE)
                 await update.message.reply_text(
-                    f"{get_current_choices(context)}\n"
                     "Оберіть тип події:",
                     reply_markup=create_event_type_keyboard()
                 )
@@ -206,7 +231,6 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if event_type not in EVENT_TYPES:
         await update.message.reply_text(
-            f"{get_current_choices(context)}\n"
             "Будь ласка, оберіть тип події зі списку:",
             reply_markup=create_event_type_keyboard()
         )
@@ -221,7 +245,6 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     if choice['type'] == "Місто"), None)
         channel_link = CITY_CHANNELS[city]
         await update.message.reply_text(
-            f"{get_current_choices(context)}\n\n"
             f"📅 Афіша подій у місті {city}\n"
             f"Підписуйтесь на наш канал, щоб бути в курсі всіх подій:\n"
             f"{channel_link}",
@@ -232,24 +255,77 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     elif '🎯 Інше' in event_type:
         city = next((choice['value'] for choice in context.user_data['choices'] 
                     if choice['type'] == "Місто"), None)
-        # Показуємо загальну інформацію та кнопку для зв'язку з менеджером
         await update.message.reply_text(
-            f"{get_current_choices(context)}\n\n"
-            f"{GENERAL_INFO[city]}",
+            GENERAL_INFO[city],
             reply_markup=create_other_keyboard()
         )
         return CHOOSING_EVENT_TYPE
     
-    # Тут буде обробка інших типів подій (буде додано пізніше)
+    # Для Дня народження та Випускного показуємо вибір локації
+    elif '🎂 День народження' in event_type or '🎓 Випускний' in event_type:
+        await save_state(update, context, CHOOSING_LOCATION)
+        await update.message.reply_text(
+            "Оберіть локацію для події:",
+            reply_markup=create_location_keyboard(event_type)
+        )
+        return CHOOSING_LOCATION
+    
+    # Для інших типів подій
     await update.message.reply_text(
-        f"{get_current_choices(context)}\n\n"
         "Наступний крок буде додано незабаром..."
     )
     
     return ConversationHandler.END
 
+async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка вибору локації"""
+    location = update.message.text
+    event_type = next((choice['value'] for choice in context.user_data['choices'] 
+                      if choice['type'] == "Тип події"), None)
+    
+    if location == BACK_BUTTON:
+        # Видаляємо останній вибір
+        remove_last_choice(context)
+        await save_state(update, context, CHOOSING_EVENT_TYPE)
+        await update.message.reply_text(
+            "Оберіть тип події:",
+            reply_markup=create_event_type_keyboard()
+        )
+        return CHOOSING_EVENT_TYPE
+    
+    if event_type and location not in LOCATIONS.get(event_type, []):
+        await update.message.reply_text(
+            "Будь ласка, оберіть локацію зі списку:",
+            reply_markup=create_location_keyboard(event_type)
+        )
+        return CHOOSING_LOCATION
+    
+    # Зберігаємо вибір локації
+    add_choice(context, "Локація", location)
+    await save_state(update, context, CHOOSING_LOCATION)
+    
+    # Тут буде додано наступний крок (буде реалізовано пізніше)
+    await update.message.reply_text(
+        "Дякуємо за вибір локації! Наступний крок буде додано незабаром..."
+    )
+    
+    return ConversationHandler.END
+
+async def save_state(update: Update, context: ContextTypes.DEFAULT_TYPE, state: int) -> None:
+    """Зберігає поточний стан розмови"""
+    if user_data and update.effective_user:
+        state_data = {
+            'choices': context.user_data.get('choices', []),
+            'last_state': state,
+            'last_update': datetime.now().isoformat()
+        }
+        user_data.save_conversation_state(update.effective_user.id, state_data)
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Скасування розмови"""
+    if user_data and update.effective_user:
+        user_data.clear_conversation_state(update.effective_user.id)
+    
     await update.message.reply_text(
         'Розмову скасовано. Щоб почати спочатку, використайте команду /start'
     )
@@ -265,6 +341,7 @@ def main():
         states={
             CHOOSING_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city_chosen)],
             CHOOSING_EVENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen)],
+            CHOOSING_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
