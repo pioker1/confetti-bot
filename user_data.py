@@ -1,40 +1,54 @@
 import json
 import os
 from typing import Dict, Optional
+from pymongo import MongoClient
+from pymongo.collection import Collection
 
 class UserData:
     def __init__(self):
         self.users: Dict[str, dict] = {}
         self.filename = "users.json"
+        
+        # Підключення до MongoDB
+        mongodb_url = os.environ.get('MONGODB_URI')
+        if mongodb_url:
+            self.client = MongoClient(mongodb_url)
+            self.db = self.client.get_default_database()
+            self.users_collection: Collection = self.db.users
+        else:
+            self.client = None
+            self.users_collection = None
+            
         self.load_data()
 
     def load_data(self):
-        """Завантаження даних з файлу або з змінної оточення"""
-        # Спочатку спробуємо завантажити з змінної оточення
-        users_json = os.environ.get('USERS_DATA')
-        if users_json:
-            try:
-                self.users = json.loads(users_json)
-                return
-            except json.JSONDecodeError:
-                pass
-
-        # Якщо немає в змінних оточення, спробуємо з файлу
-        if os.path.exists(self.filename):
-            try:
-                with open(self.filename, 'r', encoding='utf-8') as file:
-                    self.users = json.load(file)
-            except json.JSONDecodeError:
-                self.users = {}
+        """Завантаження даних з MongoDB або локального файлу"""
+        if self.users_collection:
+            # Завантаження з MongoDB
+            cursor = self.users_collection.find({})
+            self.users = {str(doc['_id']): {k: v for k, v in doc.items() if k != '_id'} 
+                         for doc in cursor}
+        else:
+            # Завантаження з локального файлу
+            if os.path.exists(self.filename):
+                try:
+                    with open(self.filename, 'r', encoding='utf-8') as file:
+                        self.users = json.load(file)
+                except json.JSONDecodeError:
+                    self.users = {}
 
     def save_data(self):
-        """Збереження даних в файл або змінну оточення"""
-        if 'HEROKU' in os.environ:
-            # На Heroku зберігаємо тільки в змінну оточення
-            users_json = json.dumps(self.users, ensure_ascii=False)
-            os.environ['USERS_DATA'] = users_json
+        """Збереження даних в MongoDB або локальний файл"""
+        if self.users_collection:
+            # Зберігання в MongoDB
+            for user_id, user_data in self.users.items():
+                self.users_collection.update_one(
+                    {'_id': user_id},
+                    {'$set': user_data},
+                    upsert=True
+                )
         else:
-            # Локально зберігаємо в файл
+            # Зберігання в локальний файл
             with open(self.filename, 'w', encoding='utf-8') as file:
                 json.dump(self.users, file, ensure_ascii=False, indent=2)
 
@@ -61,7 +75,10 @@ class UserData:
         """Видалення користувача"""
         if str(user_id) in self.users:
             del self.users[str(user_id)]
-            self.save_data()
+            if self.users_collection:
+                self.users_collection.delete_one({'_id': str(user_id)})
+            else:
+                self.save_data()
 
 # Створюємо глобальний екземпляр
 user_data = UserData() 
