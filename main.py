@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 # Стани розмови
 MAIN_MENU, CHOOSING_CITY = range(2)
 
+def create_city_keyboard() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з доступними містами"""
+    keyboard = [[KeyboardButton(city)] for city in CITIES]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка команди /start"""
     user = update.effective_user
