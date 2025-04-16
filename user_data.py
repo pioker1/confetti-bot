@@ -4,6 +4,7 @@ from typing import Dict, Optional
 from pymongo import MongoClient
 from pymongo.collection import Collection
 import certifi
+import ssl
 
 class UserData:
     def __init__(self):
@@ -15,12 +16,21 @@ class UserData:
         if mongodb_url:
             try:
                 print("Спроба підключення до MongoDB...")
-                # Використовуємо стандартні налаштування для Atlas
+                # Налаштування SSL контексту
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                
                 self.client = MongoClient(
                     mongodb_url,
                     retryWrites=True,
                     w='majority',
-                    tlsCAFile=certifi.where()
+                    ssl_cert_reqs=ssl.CERT_REQUIRED,
+                    ssl_ca_certs=certifi.where(),
+                    ssl_match_hostname=True,
+                    connect=True,
+                    serverSelectionTimeoutMS=5000,
+                    connectTimeoutMS=5000,
+                    ssl_context=ssl_context
                 )
                 
                 # Перевіряємо підключення
@@ -31,7 +41,7 @@ class UserData:
                 self.users_collection = self.db.get_collection('users')
                 print("Успішно підключено до MongoDB")
             except Exception as e:
-                print(f"Помилка підключення до MongoDB: {str(e)}")
+                print(f"Помилка підключення до MongoDB (деталі): {str(e)}")
                 print("Використовую локальне сховище")
                 self.client = None
                 self.users_collection = None
