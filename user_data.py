@@ -13,7 +13,7 @@ class UserData:
         mongodb_url = os.environ.get('MONGODB_URI')
         if mongodb_url:
             self.client = MongoClient(mongodb_url)
-            self.db = self.client.get_default_database()
+            self.db = self.client['confetti']  # Явно вказуємо назву бази даних
             self.users_collection: Collection = self.db.users
         else:
             self.client = None
