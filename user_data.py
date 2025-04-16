@@ -4,6 +4,7 @@ from typing import Dict, Optional
 from pymongo import MongoClient
 from pymongo.collection import Collection
 import urllib.parse
+import ssl
 
 class UserData:
     def __init__(self):
@@ -14,17 +15,14 @@ class UserData:
         mongodb_url = os.environ.get('MONGODB_URI')
         if mongodb_url:
             try:
-                # Додаємо параметри SSL до URL
-                if '?' in mongodb_url:
-                    mongodb_url += '&ssl=true&ssl_cert_reqs=CERT_NONE'
-                else:
-                    mongodb_url += '?ssl=true&ssl_cert_reqs=CERT_NONE'
-                    
-                self.client = MongoClient(mongodb_url, 
-                                       ssl=True,
-                                       ssl_cert_reqs='CERT_NONE',
-                                       serverSelectionTimeoutMS=5000)
-                                       
+                # Налаштування SSL параметрів
+                self.client = MongoClient(
+                    mongodb_url,
+                    tls=True,
+                    tlsAllowInvalidCertificates=True,
+                    serverSelectionTimeoutMS=5000
+                )
+                
                 # Перевіряємо підключення
                 self.client.server_info()
                 
