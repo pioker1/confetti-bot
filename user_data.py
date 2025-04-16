@@ -4,6 +4,11 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 from telegram import Contact
 from urllib.parse import urlparse, urlunparse
+from typing import Optional, Dict, Any
+from datetime import datetime
+from pymongo.database import Database
+from pymongo.collection import Collection
+from pymongo.errors import ConnectionError, OperationFailure
 
 # Налаштування логування
 logging.basicConfig(
@@ -16,86 +21,98 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 class UserData:
-    def __init__(self):
-        self.mongo_uri = os.getenv('MONGODB_URI')
-        if not self.mongo_uri:
-            logger.error("Не знайдено URI MongoDB в змінних середовища")
-            raise ValueError("Не знайдено URI MongoDB")
-        
-        try:
-            # Додаємо назву бази даних до URI, якщо її немає
-            parsed = urlparse(self.mongo_uri)
-            
-            # Якщо URI містить параметри, зберігаємо їх
-            if parsed.query:
-                base_uri = self.mongo_uri.split('?')[0]
-                params = parsed.query
-            else:
-                base_uri = self.mongo_uri
-                params = ''
-            
-            # Видаляємо слеш в кінці, якщо він є
-            base_uri = base_uri.rstrip('/')
-            
-            # Додаємо назву бази даних
-            if not parsed.path or parsed.path == '/':
-                db_name = 'confetti'
-                if params:
-                    self.mongo_uri = f"{base_uri}/confetti?{params}"
-                else:
-                    self.mongo_uri = f"{base_uri}/confetti"
-                logger.info(f"Додано базу даних {db_name} до URI")
-            else:
-                db_name = parsed.path.strip('/')
-            
-            self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
-            # Перевіряємо підключення
-            self.client.admin.command('ping')
-            self.db = self.client[db_name]
-            self.collection = self.db.users
-            logger.info(f"Успішно підключено до MongoDB, база даних: {db_name}")
-        except Exception as e:
-            logger.error(f"Помилка підключення до MongoDB: {e}")
-            raise
+    def __init__(self, mongo_uri: str):
+        self.mongo_uri = mongo_uri
+        self.client: Optional[MongoClient] = None
+        self.db: Optional[Database] = None
+        self.users: Optional[Collection] = None
+        self.conversations: Optional[Collection] = None
+        self.connect()
 
-    def add_user(self, user_id: int, user_data: dict):
+    def connect(self) -> bool:
+        """Підключення до MongoDB"""
         try:
-            self.collection.update_one(
+            # Встановлюємо з'єднання з обмеженням часу
+            self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
+            # Перевіряємо з'єднання
+            self.client.admin.command('ping')
+            
+            # Отримуємо базу даних
+            self.db = self.client.get_database()
+            self.users = self.db.users
+            self.conversations = self.db.conversations
+            
+            # Створюємо індекси
+            self.users.create_index('user_id', unique=True)
+            self.conversations.create_index('user_id', unique=True)
+            
+            logger.info("Успішно підключено до MongoDB")
+            return True
+        except Exception as e:
+            logger.error(f"Помилка підключення до MongoDB: {str(e)}")
+            return False
+
+    def save_conversation_state(self, user_id: int, state: Dict[str, Any]) -> bool:
+        """Зберігає стан розмови користувача"""
+        try:
+            state['updated_at'] = datetime.now()
+            self.conversations.update_one(
                 {'user_id': user_id},
-                {'$set': user_data},
+                {'$set': state},
                 upsert=True
             )
-            logger.info(f"Додано/оновлено дані користувача {user_id}")
+            logger.info(f"Збережено стан розмови для користувача {user_id}")
+            return True
         except Exception as e:
-            logger.error(f"Помилка при додаванні користувача {user_id}: {e}")
-            raise
+            logger.error(f"Помилка збереження стану розмови: {str(e)}")
+            return False
 
-    def get_user(self, user_id: int) -> dict:
+    def get_conversation_state(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Отримує стан розмови користувача"""
         try:
-            user = self.collection.find_one({'user_id': user_id})
-            return user if user else {}
+            state = self.conversations.find_one({'user_id': user_id})
+            if state:
+                state.pop('_id', None)  # Видаляємо _id з результату
+            return state
         except Exception as e:
-            logger.error(f"Помилка при отриманні даних користувача {user_id}: {e}")
-            return {}
+            logger.error(f"Помилка отримання стану розмови: {str(e)}")
+            return None
 
-    def update_user(self, user_id: int, update_data: dict):
+    def clear_conversation_state(self, user_id: int) -> bool:
+        """Очищає стан розмови користувача"""
         try:
-            self.collection.update_one(
+            self.conversations.delete_one({'user_id': user_id})
+            logger.info(f"Очищено стан розмови для користувача {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Помилка очищення стану розмови: {str(e)}")
+            return False
+
+    def add_user(self, user_id: int, user_info: dict) -> bool:
+        """Додає нового користувача"""
+        try:
+            user_info['created_at'] = datetime.now()
+            self.users.update_one(
                 {'user_id': user_id},
-                {'$set': update_data}
+                {'$set': user_info},
+                upsert=True
             )
-            logger.info(f"Оновлено дані користувача {user_id}")
+            logger.info(f"Додано/оновлено користувача: {user_id}")
+            return True
         except Exception as e:
-            logger.error(f"Помилка при оновленні даних користувача {user_id}: {e}")
-            raise
+            logger.error(f"Помилка додавання користувача: {str(e)}")
+            return False
 
-    def delete_user(self, user_id: int):
+    def get_user(self, user_id: int) -> Optional[dict]:
+        """Отримує інформацію про користувача"""
         try:
-            self.collection.delete_one({'user_id': user_id})
-            logger.info(f"Видалено користувача {user_id}")
+            user = self.users.find_one({'user_id': user_id})
+            if user:
+                user.pop('_id', None)  # Видаляємо _id з результату
+            return user
         except Exception as e:
-            logger.error(f"Помилка при видаленні користувача {user_id}: {e}")
-            raise
+            logger.error(f"Помилка отримання користувача: {str(e)}")
+            return None
 
     def save_contact(self, user_id: int, contact: Contact):
         """Зберігає контактну інформацію користувача"""
@@ -107,7 +124,7 @@ class UserData:
                 'user_id': contact.user_id if contact.user_id else None
             }
             
-            self.collection.update_one(
+            self.users.update_one(
                 {'user_id': user_id},
                 {'$set': {'contact': contact_data}},
                 upsert=True
@@ -120,7 +137,7 @@ class UserData:
     def get_contact(self, user_id: int) -> dict:
         """Отримує контактну інформацію користувача"""
         try:
-            user = self.collection.find_one({'user_id': user_id})
+            user = self.users.find_one({'user_id': user_id})
             return user.get('contact', {}) if user else {}
         except Exception as e:
             logger.error(f"Помилка при отриманні контакту користувача {user_id}: {e}")
@@ -133,7 +150,7 @@ user_data = None
 
 while retry_count < max_retries and user_data is None:
     try:
-        user_data = UserData()
+        user_data = UserData(os.getenv('MONGODB_URI'))
         logger.info("Успішно створено екземпляр UserData")
     except Exception as e:
         retry_count += 1
