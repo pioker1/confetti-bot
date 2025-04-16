@@ -208,6 +208,7 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👋 Вас вітає підтримка Confetti bot, оберіть метод зв'язку з менеджером\n\n"
         f"📱 Телефон: {MANAGER_INFO['phone']}\n"
         f"📨 Telegram: {MANAGER_INFO['telegram']}\n\n"
+        "Час роботи: 10:00 - 20:00\n"
         "Або оберіть опцію з меню нижче"
     )
     
@@ -274,6 +275,13 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     manager_message += f"\n\n📝 {feedback_type.capitalize()}:\n{message}"
     
+    # Визначення тексту підтвердження
+    confirmation_text = {
+        'ВІДГУК': "Дякуємо! Ваш відгук надіслано менеджеру.",
+        'СКАРГА': "Дякуємо! Ваша скарга надіслана менеджеру.",
+        'КОМЕНТАР': "Дякуємо! Ваш коментар надіслано менеджеру."
+    }.get(feedback_type, f"Дякуємо! Ваш {feedback_type} надіслано менеджеру.")
+    
     # Відправка повідомлення менеджеру
     try:
         await context.bot.send_message(
@@ -281,8 +289,7 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=manager_message
         )
         await update.message.reply_text(
-            f"Дякуємо! Ваш {feedback_type} надіслано менеджеру.\n"
-            "Він зв'яжеться з вами найближчим часом."
+            f"{confirmation_text}\nВін зв'яжеться з вами найближчим часом."
         )
     except Exception as e:
         logger.error(f"Помилка при відправці {feedback_type}: {str(e)}")
