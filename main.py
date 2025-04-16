@@ -603,13 +603,13 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Вибір доступних тривалостей залежно від локації
     if 'Домой' in location or 'кафе' in location:
-        durations = DURATIONS['Домой/кафе']
+        durations = DURATIONS.get('Домой/кафе', DURATIONS['default'])
     elif 'Турбаза' in location:
-        durations = DURATIONS['Турбаза']
+        durations = DURATIONS.get('Турбаза', DURATIONS['default'])
     elif 'Садик-школа' in location:
-        durations = DURATIONS['Садик-школа']
+        durations = DURATIONS.get('Садик-школа', DURATIONS['default'])
     else:
-        durations = DURATIONS['Домой/кафе']
+        durations = DURATIONS['default']
     
     keyboard = [[KeyboardButton(duration)] for duration in durations]
     keyboard.append([KeyboardButton('⬅️ Головне меню')])
