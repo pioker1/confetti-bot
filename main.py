@@ -7,6 +7,8 @@ from config import (
     DURATIONS, ADDITIONAL_SERVICES, BASE_PRICES, DURATION_MULTIPLIERS
 )
 from user_data import user_data
+from datetime import datetime
+import pandas as pd
 
 # Налаштування логування для відстеження роботи бота
 logging.basicConfig(
@@ -998,6 +1000,79 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     await update.message.reply_text(message)
+
+async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Відправляє список всіх користувачів у форматі Excel файлу"""
+    if str(update.effective_user.id) != MANAGER_CHAT_ID:
+        await update.message.reply_text("У вас немає прав для використання цієї команди.")
+        return
+
+    # Отримуємо дані користувачів
+    users_data = user_data.get_all_users()
+    
+    if not users_data:
+        await update.message.reply_text("Поки що немає зареєстрованих користувачів.")
+        return
+
+    # Створюємо DataFrame
+    users_list = []
+    for user_id, user_info in users_data.items():
+        user_dict = {
+            'ID': user_id,
+            "Ім'я": user_info.get('first_name', ''),
+            'Прізвище': user_info.get('last_name', ''),
+            'Username': user_info.get('username', ''),
+            'Мова': user_info.get('language_code', ''),
+            'Дата реєстрації': user_info.get('registration_date', ''),
+            'Останній візит': user_info.get('last_visit', ''),
+            'Кількість замовлень': len(user_info.get('orders', [])),
+            'Статус': user_info.get('status', 'Активний')
+        }
+        users_list.append(user_dict)
+
+    df = pd.DataFrame(users_list)
+    
+    # Створюємо файл Excel
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"users_list_{timestamp}.xlsx"
+    
+    # Налаштовуємо стилі
+    writer = pd.ExcelWriter(filename, engine='openpyxl')
+    df.to_excel(writer, index=False, sheet_name='Користувачі')
+    
+    # Отримуємо об'єкт worksheet
+    worksheet = writer.sheets['Користувачі']
+    
+    # Налаштовуємо ширину стовпців
+    for column in worksheet.columns:
+        max_length = 0
+        column = [cell for cell in column]
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
+    
+    # Зберігаємо файл
+    writer.close()
+    
+    # Відправляємо файл
+    try:
+        with open(filename, 'rb') as file:
+            await update.message.reply_document(
+                document=file,
+                filename=filename,
+                caption=f"Список користувачів станом на {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            )
+        # Видаляємо тимчасовий файл
+        os.remove(filename)
+    except Exception as e:
+        await update.message.reply_text(f"Помилка при відправці файлу: {str(e)}")
+        if os.path.exists(filename):
+            os.remove(filename)
 
 def main():
     """
