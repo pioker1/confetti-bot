@@ -227,21 +227,21 @@ async def handle_manager_contact(update: Update, context: ContextTypes.DEFAULT_T
         return await show_main_menu(update, context)
     
     if choice == '✍️ Написати відгук':
-        context.user_data['feedback_type'] = 'відгук'
+        context.user_data['feedback_type'] = 'ВІДГУК'
         await update.message.reply_text(
             "Будь ласка, напишіть ваш відгук. Він буде надіслано менеджеру."
         )
         return WRITING_FEEDBACK
     
     if choice == '⚠️ Написати скаргу':
-        context.user_data['feedback_type'] = 'скарга'
+        context.user_data['feedback_type'] = 'СКАРГА'
         await update.message.reply_text(
             "Будь ласка, опишіть вашу скаргу. Вона буде надіслана менеджеру."
         )
         return WRITING_COMPLAINT
     
     if choice == '💬 Написати коментар':
-        context.user_data['feedback_type'] = 'коментар'
+        context.user_data['feedback_type'] = 'КОМЕНТАР'
         await update.message.reply_text(
             "Будь ласка, напишіть ваш коментар. Він буде надіслано менеджеру."
         )
@@ -254,7 +254,7 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Обробка відгуку/скарги/коментаря користувача
     
     Returns:
-        int: Стан CONTACT_MANAGER
+        int: Стан MAIN_MENU
     """
     feedback_type = context.user_data.get('feedback_type', 'повідомлення')
     user = update.effective_user
@@ -291,7 +291,8 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Будь ласка, спробуйте пізніше."
         )
     
-    return await contact_manager(update, context)
+    # Повернення до головного меню
+    return await show_main_menu(update, context)
 
 async def services_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
