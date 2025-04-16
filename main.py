@@ -617,15 +617,15 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['location'] = location
     context.user_data['state'] = CHOOSING_DURATION
     
-    # Вибір доступних тривалостей залежно від локації
+    # Визначення доступних тривалостей залежно від локації
     if 'Домой' in location or 'кафе' in location:
-        durations = DURATIONS.get('Домой/кафе', DURATIONS['default'])
+        durations = DURATIONS.get('Домой/кафе', ['3 години', '4 години', '5 годин'])
     elif 'Турбаза' in location:
-        durations = DURATIONS.get('Турбаза', DURATIONS['default'])
+        durations = DURATIONS.get('Турбаза', ['4 години', '5 годин', '6 годин'])
     elif 'Садик-школа' in location:
-        durations = DURATIONS.get('Садик-школа', DURATIONS['default'])
+        durations = DURATIONS.get('Садик-школа', ['2 години', '3 години', '4 години'])
     else:
-        durations = DURATIONS['default']
+        durations = ['3 години', '4 години', '5 годин']  # Значення за замовчуванням
     
     keyboard = [[KeyboardButton(duration)] for duration in durations]
     keyboard.append([KeyboardButton('⬅️ Головне меню')])
