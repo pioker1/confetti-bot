@@ -77,8 +77,8 @@ def create_location_keyboard(event_type: str) -> ReplyKeyboardMarkup:
 def create_other_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру для розділу 'Інше'"""
     keyboard = [
-        [KeyboardButton(CONTACT_MANAGER_BUTTON)],
         [KeyboardButton(SUGGEST_LOCATION_BUTTON)],
+        [KeyboardButton(CONTACT_MANAGER_BUTTON)],
         [KeyboardButton(BACK_BUTTON)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -250,8 +250,13 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     elif '🎯 Інше' in event_type:
         city = next((choice['value'] for choice in context.user_data['choices'] 
                     if choice['type'] == "Місто"), None)
+        # Зберігаємо вибір типу події
+        add_choice(context, "Тип події", event_type)
+        
+        # Показуємо загальну інформацію та клавіатуру з опціями
         await update.message.reply_text(
-            GENERAL_INFO[city],
+            f"{GENERAL_INFO[city]}\n\n"
+            "Оберіть опцію:",
             reply_markup=create_other_keyboard()
         )
         return CHOOSING_EVENT_TYPE
