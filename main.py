@@ -10,6 +10,7 @@ from config import (
 from user_data import user_data
 from datetime import datetime
 import pandas as pd
+import telegram
 
 # Налаштування логування для відстеження роботи бота
 logging.basicConfig(
@@ -918,6 +919,7 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             users = user_data.get_all_users()
             success = 0
             failed = 0
+            blocked = 0
             
             # Розсилка файлу всім користувачам
             for user_id in users:
@@ -947,6 +949,9 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             caption=f"📢 Повідомлення від менеджера:\n\n{message}"
                         )
                     success += 1
+                except telegram.error.Forbidden:
+                    blocked += 1
+                    logger.warning(f"Користувач {user_id} заблокував бота")
                 except Exception as e:
                     logger.error(f"Помилка при відправці файлу користувачу {user_id}: {str(e)}")
                     failed += 1
@@ -954,7 +959,8 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"Розсилка файлу завершена:\n"
                 f"✅ Успішно: {success}\n"
-                f"❌ Помилок: {failed}"
+                f"❌ Помилок: {failed}\n"
+                f"🚫 Заблоковано: {blocked}"
             )
         else:
             try:
@@ -967,37 +973,40 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
                 
                 # Надсилання файлу конкретному користувачу
-                if file_message.document:
-                    await context.bot.send_document(
-                        chat_id=target_user_id,
-                        document=file_message.document.file_id,
-                        caption=f"📢 Повідомлення від менеджера:\n\n{message}"
+                try:
+                    if file_message.document:
+                        await context.bot.send_document(
+                            chat_id=target_user_id,
+                            document=file_message.document.file_id,
+                            caption=f"📢 Повідомлення від менеджера:\n\n{message}"
+                        )
+                    elif file_message.photo:
+                        await context.bot.send_photo(
+                            chat_id=target_user_id,
+                            photo=file_message.photo[-1].file_id,
+                            caption=f"📢 Повідомлення від менеджера:\n\n{message}"
+                        )
+                    elif file_message.video:
+                        await context.bot.send_video(
+                            chat_id=target_user_id,
+                            video=file_message.video.file_id,
+                            caption=f"📢 Повідомлення від менеджера:\n\n{message}"
+                        )
+                    elif file_message.audio:
+                        await context.bot.send_audio(
+                            chat_id=target_user_id,
+                            audio=file_message.audio.file_id,
+                            caption=f"📢 Повідомлення від менеджера:\n\n{message}"
+                        )
+                    
+                    await update.message.reply_text(
+                        f"Файл надіслано користувачу:\n"
+                        f"ID: {target_user_id}\n"
+                        f"Ім'я: {user_info.get('first_name', 'Невідомо')}\n"
+                        f"Username: @{user_info.get('username', 'Невідомо')}"
                     )
-                elif file_message.photo:
-                    await context.bot.send_photo(
-                        chat_id=target_user_id,
-                        photo=file_message.photo[-1].file_id,
-                        caption=f"📢 Повідомлення від менеджера:\n\n{message}"
-                    )
-                elif file_message.video:
-                    await context.bot.send_video(
-                        chat_id=target_user_id,
-                        video=file_message.video.file_id,
-                        caption=f"📢 Повідомлення від менеджера:\n\n{message}"
-                    )
-                elif file_message.audio:
-                    await context.bot.send_audio(
-                        chat_id=target_user_id,
-                        audio=file_message.audio.file_id,
-                        caption=f"📢 Повідомлення від менеджера:\n\n{message}"
-                    )
-                
-                await update.message.reply_text(
-                    f"Файл надіслано користувачу:\n"
-                    f"ID: {target_user_id}\n"
-                    f"Ім'я: {user_info.get('first_name', 'Невідомо')}\n"
-                    f"Username: @{user_info.get('username', 'Невідомо')}"
-                )
+                except telegram.error.Forbidden:
+                    await update.message.reply_text(f"Користувач {target_user_id} заблокував бота")
             except ValueError:
                 await update.message.reply_text("Невірний формат ID користувача")
     else:
@@ -1016,6 +1025,7 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
             success = 0
             failed = 0
+            blocked = 0
             
             # Розсилка текстового повідомлення всім користувачам
             for user_id in users:
@@ -1025,6 +1035,9 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         text=f"📢 Повідомлення від менеджера:\n\n{message}"
                     )
                     success += 1
+                except telegram.error.Forbidden:
+                    blocked += 1
+                    logger.warning(f"Користувач {user_id} заблокував бота")
                 except Exception as e:
                     logger.error(f"Помилка при відправці повідомлення користувачу {user_id}: {str(e)}")
                     failed += 1
@@ -1032,7 +1045,8 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"Розсилка завершена:\n"
                 f"✅ Успішно: {success}\n"
-                f"❌ Помилок: {failed}"
+                f"❌ Помилок: {failed}\n"
+                f"🚫 Заблоковано: {blocked}"
             )
         else:
             try:
@@ -1049,17 +1063,20 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
                 
                 # Надсилання текстового повідомлення конкретному користувачу
-                await context.bot.send_message(
-                    chat_id=target_user_id,
-                    text=f"📢 Повідомлення від менеджера:\n\n{message}"
-                )
-                
-                await update.message.reply_text(
-                    f"Повідомлення надіслано користувачу:\n"
-                    f"ID: {target_user_id}\n"
-                    f"Ім'я: {user_info.get('first_name', 'Невідомо')}\n"
-                    f"Username: @{user_info.get('username', 'Невідомо')}"
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=f"📢 Повідомлення від менеджера:\n\n{message}"
+                    )
+                    
+                    await update.message.reply_text(
+                        f"Повідомлення надіслано користувачу:\n"
+                        f"ID: {target_user_id}\n"
+                        f"Ім'я: {user_info.get('first_name', 'Невідомо')}\n"
+                        f"Username: @{user_info.get('username', 'Невідомо')}"
+                    )
+                except telegram.error.Forbidden:
+                    await update.message.reply_text(f"Користувач {target_user_id} заблокував бота")
             except ValueError:
                 await update.message.reply_text("Невірний формат ID користувача")
 
