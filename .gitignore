@@ -1,0 +1,25 @@
+# Конфіденційні дані
+.env
+users.json
+__pycache__/
+
+# Локальні файли
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+
+# Віртуальне середовище
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Інші файли
+.DS_Store 
