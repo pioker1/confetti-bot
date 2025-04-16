@@ -3,7 +3,7 @@ import logging
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from telegram import Contact
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 # Налаштування логування
 logging.basicConfig(
@@ -24,17 +24,29 @@ class UserData:
         
         try:
             # Додаємо назву бази даних до URI, якщо її немає
-            parsed_uri = urlparse(self.mongo_uri)
-            if not parsed_uri.path or parsed_uri.path == '/':
+            parsed = urlparse(self.mongo_uri)
+            
+            # Якщо URI містить параметри, зберігаємо їх
+            if parsed.query:
+                base_uri = self.mongo_uri.split('?')[0]
+                params = parsed.query
+            else:
+                base_uri = self.mongo_uri
+                params = ''
+            
+            # Видаляємо слеш в кінці, якщо він є
+            base_uri = base_uri.rstrip('/')
+            
+            # Додаємо назву бази даних
+            if not parsed.path or parsed.path == '/':
                 db_name = 'confetti'
-                if '?' in self.mongo_uri:
-                    base_uri, params = self.mongo_uri.split('?', 1)
-                    self.mongo_uri = f"{base_uri}/{db_name}?{params}"
+                if params:
+                    self.mongo_uri = f"{base_uri}/confetti?{params}"
                 else:
-                    self.mongo_uri = f"{self.mongo_uri}/{db_name}"
+                    self.mongo_uri = f"{base_uri}/confetti"
                 logger.info(f"Додано базу даних {db_name} до URI")
             else:
-                db_name = parsed_uri.path.strip('/')
+                db_name = parsed.path.strip('/')
             
             self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
             # Перевіряємо підключення
