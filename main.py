@@ -1,11 +1,11 @@
 import logging
 import os
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, MANAGER_CHAT_ID, CITIES, EVENT_TYPES, LOCATIONS, 
     DURATIONS, ADDITIONAL_SERVICES, BASE_PRICES, DURATION_MULTIPLIERS,
-    MANAGER_INFO
+    MANAGER_INFO, TAXI_PRICES, TAXI_PRICE_DISCLAIMER
 )
 from user_data import user_data
 from datetime import datetime
@@ -62,7 +62,7 @@ SERVICE_DETAILS = {
     }
 }
 
-def calculate_total_price(location, duration, services):
+def calculate_total_price(location, duration, services, city=None, district=None):
     """
     Розрахунок загальної вартості замовлення
     
@@ -70,9 +70,11 @@ def calculate_total_price(location, duration, services):
         location (str): Обрана локація
         duration (str): Обрана тривалість
         services (list): Список обраних додаткових послуг
+        city (str, optional): Місто для розрахунку вартості таксі
+        district (str, optional): Район для розрахунку вартості таксі
         
     Returns:
-        int: Загальна вартість замовлення
+        tuple: (Загальна вартість замовлення, Вартість таксі)
     """
     # Базова ціна за локацію
     base_price = BASE_PRICES.get(location, 1500)
@@ -89,9 +91,14 @@ def calculate_total_price(location, duration, services):
         if service_info:
             total += service_info['price']
     
-    return total
+    # Розрахунок вартості таксі
+    taxi_price = 0
+    if city and district and city in TAXI_PRICES:
+        taxi_price = TAXI_PRICES[city].get(district, TAXI_PRICES[city]['Інше'])
+    
+    return total, taxi_price
 
-def format_price_info(location, duration, services):
+def format_price_info(location, duration, services, city=None, district=None):
     """
     Форматування інформації про ціни для відображення користувачу
     
@@ -99,6 +106,8 @@ def format_price_info(location, duration, services):
         location (str): Обрана локація
         duration (str): Обрана тривалість
         services (list): Список обраних додаткових послуг
+        city (str, optional): Місто для розрахунку вартості таксі
+        district (str, optional): Район для розрахунку вартості таксі
         
     Returns:
         str: Відформатований текст з інформацією про ціни
@@ -124,9 +133,17 @@ def format_price_info(location, duration, services):
                 services_total += price
                 info += f"• {service}: {price} грн\n"
         info += f"\nВартість додаткових послуг: {services_total} грн\n"
-        info += f"Загальна вартість: {base_total + services_total} грн"
+        info += f"Загальна вартість послуг: {base_total + services_total} грн\n"
     else:
-        info += f"Загальна вартість: {base_total} грн"
+        info += f"Загальна вартість послуг: {base_total} грн\n"
+    
+    # Додавання інформації про таксі
+    if city and district:
+        taxi_price = TAXI_PRICES.get(city, {}).get(district, TAXI_PRICES.get(city, {}).get('Інше', 0))
+        if taxi_price:
+            info += f"\n🚕 Вартість таксі (туди/назад): {taxi_price} грн\n"
+            info += f"Загальна вартість з таксі: {base_total + services_total + taxi_price} грн\n\n"
+            info += TAXI_PRICE_DISCLAIMER
     
     return info
 
@@ -1293,6 +1310,67 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Помилка при відправці файлу: {str(e)}")
         if os.path.exists(filename):
             os.remove(filename)
+
+async def confirm_order(update: Update, context: CallbackContext) -> int:
+    """Підтвердження замовлення"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = str(update.effective_user.id)
+    user = user_data[user_id]
+    
+    # Отримуємо всі дані замовлення
+    city = context.user_data.get('city')
+    district = user.get('district')
+    location = user.get('location')
+    duration = user.get('duration')
+    services = user.get('services', [])
+    
+    # Розраховуємо вартість
+    service_price, taxi_price = calculate_total_price(location, duration, services, city, district)
+    total_price = service_price + taxi_price
+    
+    # Форматуємо інформацію про замовлення
+    order_info = (
+        f"✅ Замовлення підтверджено!\n\n"
+        f"📍 Місто: {city}\n"
+        f"🏘 Район: {district}\n"
+        f"🏢 Локація: {location}\n"
+        f"⏱ Тривалість: {duration}\n"
+        f"💰 Вартість послуг: {service_price} грн\n"
+        f"🚕 Вартість таксі: {taxi_price} грн\n"
+        f"💵 Загальна вартість: {total_price} грн\n"
+    )
+    
+    if services:
+        order_info += "\nДодаткові послуги:\n"
+        for service in services:
+            order_info += f"• {service}\n"
+    
+    # Відправляємо інформацію про замовлення менеджеру
+    manager_message = (
+        f"🆕 Нове замовлення!\n\n"
+        f"👤 Користувач: {update.effective_user.full_name}\n"
+        f"📱 ID: {user_id}\n\n"
+        f"{order_info}"
+    )
+    
+    await context.bot.send_message(
+        chat_id=MANAGER_CHAT_ID,
+        text=manager_message
+    )
+    
+    # Відправляємо підтвердження користувачу
+    await query.edit_message_text(
+        text=f"{order_info}\n\n"
+             f"📞 Наш менеджер зв'яжеться з вами найближчим часом для уточнення деталей.\n"
+             f"Дякуємо за замовлення! 🎉"
+    )
+    
+    # Очищаємо дані замовлення
+    user_data[user_id] = {}
+    
+    return ConversationHandler.END
 
 def main():
     """
