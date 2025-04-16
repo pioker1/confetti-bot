@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 MAIN_MENU, CONTACT_MANAGER, SERVICES_INFO, VIEWING_SERVICE = range(4)
 (CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION, 
  CHOOSING_DURATION, CHOOSING_SERVICES, ENTERING_CUSTOM_DURATION,
- WRITING_FEEDBACK, WRITING_COMPLAINT, WRITING_COMMENT) = range(4, 13)
+ WRITING_FEEDBACK, WRITING_COMPLAINT, WRITING_COMMENT,
+ CHOOSING_DISTRICT, CONFIRM_ORDER, CANCEL_ORDER) = range(4, 15)
 
 # Опції головного меню з відповідними емодзі
 MAIN_MENU_OPTIONS = {
@@ -839,45 +840,29 @@ async def service_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         location = context.user_data.get('location')
         duration = context.user_data.get('duration')
         services = context.user_data.get('services', [])
+        city = context.user_data.get('city')
+        district = context.user_data.get('district')
         
-        price_info = format_price_info(location, duration, services)
+        price_info = format_price_info(location, duration, services, city, district)
         await update.message.reply_text(price_info)
         return CHOOSING_SERVICES
     
     if choice == '✅ Завершити вибір':
-        context.user_data['state'] = MAIN_MENU
-        location = context.user_data.get('location')
-        duration = context.user_data.get('duration')
-        services = context.user_data.get('services', [])
-        
-        # Формування підсумкового повідомлення про замовлення
-        summary = (
-            f"🎉 Нове замовлення:\n\n"
-            f"🏙 Місто: {context.user_data.get('city')}\n"
-            f"🎈 Тип події: {context.user_data.get('event_type')}\n"
-            f"📍 Локація: {location}\n"
-            f"⏱ Тривалість: {duration}\n"
-            f"🎁 Додаткові послуги:\n"
-        )
-        
-        if services:
-            for service in services:
-                summary += f"   • {service}\n"
+        # Переходимо до вибору району
+        city = context.user_data.get('city')
+        if city in TAXI_PRICES:
+            keyboard = [[KeyboardButton(district)] for district in TAXI_PRICES[city].keys()]
+            keyboard.append([KeyboardButton('⬅️ Головне меню')])
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await update.message.reply_text(
+                'Оберіть район, де буде проходити свято:',
+                reply_markup=reply_markup
+            )
+            return CHOOSING_DISTRICT
         else:
-            summary += "   • Не обрано\n"
-        
-        # Додавання інформації про вартість
-        price_info = format_price_info(location, duration, services)
-        summary += f"\n{price_info}"
-        
-        # Відправка повідомлення менеджеру
-        await send_to_manager(context, context.user_data, summary)
-        
-        # Відправка підтвердження клієнту
-        await update.message.reply_text(
-            summary + "\nДякуємо за замовлення! Наш менеджер зв'яжеться з вами найближчим часом."
-        )
-        return await show_main_menu(update, context)
+            # Якщо місто не знайдено в TAXI_PRICES, пропускаємо вибір району
+            return await confirm_order(update, context)
     
     # Обробка видалення послуги
     if choice in context.user_data.get('services', []):
@@ -916,6 +901,62 @@ async def service_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Додано: {service_name}")
     
     return CHOOSING_SERVICES
+
+async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обробка вибору району та підтвердження замовлення
+    
+    Returns:
+        int: Стан MAIN_MENU
+    """
+    if update.message.text == '⬅️ Головне меню':
+        context.user_data['state'] = MAIN_MENU
+        return await show_main_menu(update, context)
+    
+    district = update.message.text
+    context.user_data['district'] = district
+    
+    # Розраховуємо вартість з урахуванням району
+    location = context.user_data.get('location')
+    duration = context.user_data.get('duration')
+    services = context.user_data.get('services', [])
+    city = context.user_data.get('city')
+    
+    service_price, taxi_price = calculate_total_price(location, duration, services, city, district)
+    total_price = service_price + taxi_price
+    
+    # Форматуємо інформацію про замовлення
+    order_info = (
+        f"🎉 Нове замовлення:\n\n"
+        f"🏙 Місто: {city}\n"
+        f"🏘 Район: {district}\n"
+        f"🎈 Тип події: {context.user_data.get('event_type')}\n"
+        f"📍 Локація: {location}\n"
+        f"⏱ Тривалість: {duration}\n"
+        f"💰 Вартість послуг: {service_price} грн\n"
+        f"🚕 Вартість таксі: {taxi_price} грн\n"
+        f"💵 Загальна вартість: {total_price} грн\n"
+    )
+    
+    if services:
+        order_info += "\nДодаткові послуги:\n"
+        for service in services:
+            order_info += f"• {service}\n"
+    
+    # Створюємо кнопки підтвердження
+    keyboard = [
+        [InlineKeyboardButton("✅ Підтвердити замовлення", callback_data="confirm_order")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_order")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"{order_info}\n\n"
+        "Будь ласка, підтвердіть ваше замовлення:",
+        reply_markup=reply_markup
+    )
+    
+    return CONFIRM_ORDER
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -1396,6 +1437,9 @@ def main():
             CHOOSING_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, duration_chosen)],
             CHOOSING_SERVICES: [MessageHandler(filters.TEXT & ~filters.COMMAND, service_chosen)],
             ENTERING_CUSTOM_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_duration)],
+            CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
+            CONFIRM_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_order)],
+            CANCEL_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, cancel)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
