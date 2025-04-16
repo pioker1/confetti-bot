@@ -1,8 +1,11 @@
 import logging
 import os
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from config import TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES
+from config import (
+    TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
+    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO
+)
 from user_data import user_data
 from datetime import datetime
 
@@ -16,8 +19,9 @@ logger = logging.getLogger(__name__)
 # Стани розмови
 CHOOSING_CITY, CHOOSING_EVENT_TYPE = range(2)
 
-# Кнопка "Назад"
+# Кнопки
 BACK_BUTTON = "⬅️ Назад"
+CONTACT_MANAGER_BUTTON = "📞 Зв'язатися з менеджером"
 
 def create_city_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з доступними містами"""
@@ -35,6 +39,14 @@ def create_event_type_keyboard() -> ReplyKeyboardMarkup:
         keyboard.append(row)
     # Додаємо кнопку "Назад" в останній рядок
     keyboard.append([KeyboardButton(BACK_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def create_other_keyboard() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру для розділу 'Інше'"""
+    keyboard = [
+        [KeyboardButton(CONTACT_MANAGER_BUTTON)],
+        [KeyboardButton(BACK_BUTTON)]
+    ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -116,6 +128,7 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події"""
     event_type = update.message.text
+    city = context.user_data.get('city')
     
     if event_type == BACK_BUTTON:
         # Повертаємося до вибору міста
@@ -124,6 +137,18 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_markup=create_city_keyboard()
         )
         return CHOOSING_CITY
+    
+    if event_type == CONTACT_MANAGER_BUTTON:
+        # Показуємо контакти менеджера
+        manager = MANAGER_INFO[city]
+        await update.message.reply_text(
+            f"📞 Контакти менеджера ({city}):\n\n"
+            f"Ім'я: {manager['name']}\n"
+            f"Телефон: {manager['phone']}\n"
+            f"Telegram: {manager['telegram']}"
+        )
+        # Залишаємося в поточному стані
+        return CHOOSING_EVENT_TYPE
     
     if event_type not in EVENT_TYPES:
         await update.message.reply_text(
@@ -135,7 +160,26 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Зберігаємо вибір типу події
     context.user_data['event_type'] = event_type
     
-    # Тут буде наступний крок (буде додано пізніше)
+    # Обробка спеціальних гілок
+    if '📅 Афіша подій' in event_type:
+        channel_link = CITY_CHANNELS[city]
+        await update.message.reply_text(
+            f"📅 Афіша подій у місті {city}\n\n"
+            f"Підписуйтесь на наш канал, щоб бути в курсі всіх подій:\n"
+            f"{channel_link}",
+            reply_markup=create_event_type_keyboard()
+        )
+        return CHOOSING_EVENT_TYPE
+    
+    elif '🎯 Інше' in event_type:
+        # Показуємо загальну інформацію та кнопку для зв'язку з менеджером
+        await update.message.reply_text(
+            GENERAL_INFO[city],
+            reply_markup=create_other_keyboard()
+        )
+        return CHOOSING_EVENT_TYPE
+    
+    # Тут буде обробка інших типів подій (буде додано пізніше)
     await update.message.reply_text(
         f"🎉 Ви обрали: {event_type}\n"
         "Наступний крок буде додано незабаром..."
