@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Кожен стан відповідає певному етапу взаємодії
 MAIN_MENU, CONTACT_MANAGER, SERVICES_INFO, VIEWING_SERVICE = range(4)
 (CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION, 
- CHOOSING_DURATION, CHOOSING_SERVICES) = range(4, 9)
+ CHOOSING_DURATION, CHOOSING_SERVICES, ENTERING_CUSTOM_DURATION) = range(4, 10)
 
 # Опції головного меню з відповідними емодзі
 MAIN_MENU_OPTIONS = {
@@ -509,6 +509,34 @@ async def duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Оберіть місце проведення:', reply_markup=reply_markup)
         return CHOOSING_LOCATION
     
+    if update.message.text == 'більше':
+        context.user_data['state'] = ENTERING_CUSTOM_DURATION
+        await update.message.reply_text(
+            "Будь ласка, введіть тривалість свята у форматі:\n"
+            "• Час у годинах (наприклад: 4)\n"
+            "• Час у годинах з половиною (наприклад: 4.5)\n\n"
+            "Доступні значення:\n"
+            "• 3.5 години\n"
+            "• 4 години\n"
+            "• 4.5 години\n"
+            "• 5 годин\n"
+            "• 5.5 годин\n"
+            "• 6 годин\n"
+            "• 6.5 годин\n"
+            "• 7 годин\n"
+            "• 7.5 годин\n"
+            "• 8 годин\n"
+            "• 8.5 годин\n"
+            "• 9 годин\n"
+            "• 9.5 годин\n"
+            "• 10 годин\n"
+            "• 10.5 годин\n"
+            "• 11 годин\n"
+            "• 11.5 годин\n"
+            "• 12 годин"
+        )
+        return ENTERING_CUSTOM_DURATION
+    
     context.user_data['duration'] = update.message.text
     context.user_data['state'] = CHOOSING_SERVICES
     
@@ -544,6 +572,85 @@ async def duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
     return CHOOSING_SERVICES
+
+async def handle_custom_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обробка введення користувачем тривалості свята
+    
+    Returns:
+        int: Стан CHOOSING_SERVICES або ENTERING_CUSTOM_DURATION
+    """
+    try:
+        duration_text = update.message.text.strip()
+        duration = float(duration_text)
+        
+        # Перевірка діапазону
+        if duration < 3.5:
+            await update.message.reply_text(
+                "Тривалість не може бути менше 3.5 годин. Будь ласка, введіть коректне значення."
+            )
+            return ENTERING_CUSTOM_DURATION
+        
+        if duration > 12:
+            await update.message.reply_text(
+                "Тривалість не може бути більше 12 годин. Будь ласка, введіть коректне значення."
+            )
+            return ENTERING_CUSTOM_DURATION
+        
+        # Перевірка на кратність 0.5
+        if not (duration * 2).is_integer():
+            await update.message.reply_text(
+                "Тривалість повинна бути кратною 0.5 години. "
+                "Наприклад: 3.5, 4, 4.5, 5, 5.5 і т.д."
+            )
+            return ENTERING_CUSTOM_DURATION
+        
+        # Зберігаємо тривалість
+        context.user_data['duration'] = f"{duration} годин"
+        context.user_data['duration_multiplier'] = duration
+        
+        # Переходимо до вибору послуг
+        context.user_data['state'] = CHOOSING_SERVICES
+        
+        # Створення клавіатури з додатковими послугами
+        keyboard = []
+        for service, info in ADDITIONAL_SERVICES.items():
+            button_text = f"{service} ({info['price']} грн)"
+            keyboard.append([KeyboardButton(button_text)])
+        
+        keyboard.append([KeyboardButton('❌ Видалити послугу')])
+        keyboard.append([KeyboardButton('💰 Розрахувати вартість')])
+        keyboard.append([KeyboardButton('✅ Завершити вибір')])
+        keyboard.append([KeyboardButton('⬅️ Головне меню')])
+        
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        context.user_data['services'] = []
+        
+        # Показ базової вартості з урахуванням тривалості
+        location = context.user_data.get('location')
+        base_price = BASE_PRICES.get(location, 1500)
+        total = base_price * duration
+        
+        await update.message.reply_text(
+            f'Базова вартість: {total} грн\n\n'
+            'Оберіть додаткові послуги (можна обрати декілька).\n'
+            'Використовуйте кнопки:\n'
+            '• ❌ Видалити послугу - для видалення послуги\n'
+            '• 💰 Розрахувати вартість - для перегляду поточної вартості\n'
+            '• ✅ Завершити вибір - для завершення замовлення',
+            reply_markup=reply_markup
+        )
+        return CHOOSING_SERVICES
+        
+    except ValueError:
+        await update.message.reply_text(
+            "Невірний формат введення. Будь ласка, введіть тривалість у форматі:\n"
+            "• Час у годинах (наприклад: 4)\n"
+            "• Час у годинах з половиною (наприклад: 4.5)\n\n"
+            "Доступні значення від 3.5 до 12 годин з кроком 0.5 години."
+        )
+        return ENTERING_CUSTOM_DURATION
 
 async def service_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -1078,6 +1185,7 @@ def main():
             CHOOSING_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen)],
             CHOOSING_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, duration_chosen)],
             CHOOSING_SERVICES: [MessageHandler(filters.TEXT & ~filters.COMMAND, service_chosen)],
+            ENTERING_CUSTOM_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_duration)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
