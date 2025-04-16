@@ -983,50 +983,10 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Помилок: {failed}"
     )
 
-async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Показ списку всіх користувачів бота з детальною інформацією
-    
-    Returns:
-        None
-    """
-    if str(update.effective_user.id) != str(MANAGER_CHAT_ID):
-        await update.message.reply_text("Ця команда доступна тільки для менеджера")
-        return
-    
-    users = user_data.get_all_users()
-    if not users:
-        await update.message.reply_text("Поки що немає користувачів")
-        return
-    
-    message = "📋 Список користувачів:\n\n"
-    for user_id in users:
-        user_info = user_data.get_user(user_id)
-        registration_date = user_info.get('registration_date', 'Невідомо')
-        last_visit = user_info.get('last_visit', 'Невідомо')
-        orders_count = len(user_info.get('orders', []))
-        
-        message += (
-            f"👤 ID: {user_id}\n"
-            f"📝 Ім'я: {user_info.get('first_name', 'Невідомо')}"
-        )
-        if user_info.get('last_name'):
-            message += f" {user_info.get('last_name')}"
-        message += (
-            f"\n🔖 Username: @{user_info.get('username', 'Невідомо')}\n"
-            f"🌐 Мова: {user_info.get('language_code', 'Невідомо')}\n"
-            f"📅 Дата реєстрації: {registration_date}\n"
-            f"🕒 Останній візит: {last_visit}\n"
-            f"📦 Кількість замовлень: {orders_count}\n"
-            "-------------------\n"
-        )
-    
-    await update.message.reply_text(message)
-
 async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Відправляє список всіх користувачів у форматі Excel файлу"""
     if str(update.effective_user.id) != str(MANAGER_CHAT_ID):
-        await update.message.reply_text("У вас немає прав для використання цієї команди.")
+        await update.message.reply_text("Ця команда доступна тільки для менеджера")
         return
 
     # Отримуємо дані користувачів
@@ -1122,7 +1082,7 @@ def main():
     # Додавання обробників команд для менеджера
     application.add_handler(CommandHandler('send', send_message))
     application.add_handler(CommandHandler('broadcast', broadcast_message))
-    application.add_handler(CommandHandler('users', list_users))
+    application.add_handler(CommandHandler('users', users_command))
     
     application.add_handler(conv_handler)
     application.run_polling()
