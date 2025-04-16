@@ -59,6 +59,37 @@ def get_manager_contact_message(city: str) -> str:
         telegram=manager['telegram']
     )
 
+def initialize_user_choices(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ініціалізує структуру для збереження виборів користувача"""
+    if 'choices' not in context.user_data:
+        context.user_data['choices'] = []
+
+def add_choice(context: ContextTypes.DEFAULT_TYPE, choice_type: str, value: str) -> None:
+    """Додає вибір користувача до історії"""
+    initialize_user_choices(context)
+    context.user_data['choices'].append({'type': choice_type, 'value': value})
+    logger.info(f"Додано вибір: {choice_type} = {value}")
+
+def remove_last_choice(context: ContextTypes.DEFAULT_TYPE) -> dict:
+    """Видаляє та повертає останній вибір користувача"""
+    initialize_user_choices(context)
+    if context.user_data['choices']:
+        last_choice = context.user_data['choices'].pop()
+        logger.info(f"Видалено останній вибір: {last_choice}")
+        return last_choice
+    return None
+
+def get_current_choices(context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Формує текстове представлення поточних виборів користувача"""
+    initialize_user_choices(context)
+    if not context.user_data['choices']:
+        return "Ще не зроблено жодного вибору"
+    
+    choices_text = "Ваші поточні вибори:\n"
+    for choice in context.user_data['choices']:
+        choices_text += f"• {choice['type']}: {choice['value']}\n"
+    return choices_text
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка команди /start"""
     user = update.effective_user
@@ -101,6 +132,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     # Очищаємо попередні дані користувача
     context.user_data.clear()
+    initialize_user_choices(context)
     
     # Відправляємо привітання
     await update.message.reply_text(
@@ -124,11 +156,11 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return CHOOSING_CITY
     
     # Зберігаємо вибір міста
-    context.user_data['city'] = city
+    add_choice(context, "Місто", city)
     
-    # Показуємо типи подій
+    # Показуємо типи подій та поточні вибори
     await update.message.reply_text(
-        f"🏙 Ви обрали місто: {city}\n"
+        f"{get_current_choices(context)}\n"
         "Тепер оберіть тип події:",
         reply_markup=create_event_type_keyboard()
     )
@@ -138,18 +170,34 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події"""
     event_type = update.message.text
-    city = context.user_data.get('city')
     
     if event_type == BACK_BUTTON:
-        # Повертаємося до вибору міста
-        await update.message.reply_text(
-            "Оберіть місто, де відбудеться подія:",
-            reply_markup=create_city_keyboard()
-        )
-        return CHOOSING_CITY
+        # Видаляємо останній вибір
+        last_choice = remove_last_choice(context)
+        if last_choice:
+            if last_choice['type'] == "Місто":
+                # Повертаємося до вибору міста
+                await update.message.reply_text(
+                    f"{get_current_choices(context)}\n"
+                    "Оберіть місто, де відбудеться подія:",
+                    reply_markup=create_city_keyboard()
+                )
+                return CHOOSING_CITY
+            else:
+                # Повертаємося до вибору типу події
+                city = next((choice['value'] for choice in context.user_data['choices'] 
+                           if choice['type'] == "Місто"), None)
+                await update.message.reply_text(
+                    f"{get_current_choices(context)}\n"
+                    "Оберіть тип події:",
+                    reply_markup=create_event_type_keyboard()
+                )
+                return CHOOSING_EVENT_TYPE
     
     if event_type == CONTACT_MANAGER_BUTTON:
         # Показуємо контакти менеджера
+        city = next((choice['value'] for choice in context.user_data['choices'] 
+                    if choice['type'] == "Місто"), None)
         await update.message.reply_text(
             get_manager_contact_message(city),
             reply_markup=create_other_keyboard()
@@ -158,19 +206,23 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if event_type not in EVENT_TYPES:
         await update.message.reply_text(
+            f"{get_current_choices(context)}\n"
             "Будь ласка, оберіть тип події зі списку:",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
     
     # Зберігаємо вибір типу події
-    context.user_data['event_type'] = event_type
+    add_choice(context, "Тип події", event_type)
     
     # Обробка спеціальних гілок
     if '📅 Афіша подій' in event_type:
+        city = next((choice['value'] for choice in context.user_data['choices'] 
+                    if choice['type'] == "Місто"), None)
         channel_link = CITY_CHANNELS[city]
         await update.message.reply_text(
-            f"📅 Афіша подій у місті {city}\n\n"
+            f"{get_current_choices(context)}\n\n"
+            f"📅 Афіша подій у місті {city}\n"
             f"Підписуйтесь на наш канал, щоб бути в курсі всіх подій:\n"
             f"{channel_link}",
             reply_markup=create_event_type_keyboard()
@@ -178,16 +230,19 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return CHOOSING_EVENT_TYPE
     
     elif '🎯 Інше' in event_type:
+        city = next((choice['value'] for choice in context.user_data['choices'] 
+                    if choice['type'] == "Місто"), None)
         # Показуємо загальну інформацію та кнопку для зв'язку з менеджером
         await update.message.reply_text(
-            GENERAL_INFO[city],
+            f"{get_current_choices(context)}\n\n"
+            f"{GENERAL_INFO[city]}",
             reply_markup=create_other_keyboard()
         )
         return CHOOSING_EVENT_TYPE
     
     # Тут буде обробка інших типів подій (буде додано пізніше)
     await update.message.reply_text(
-        f"🎉 Ви обрали: {event_type}\n"
+        f"{get_current_choices(context)}\n\n"
         "Наступний крок буде додано незабаром..."
     )
     
