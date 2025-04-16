@@ -1439,7 +1439,6 @@ def main():
             ENTERING_CUSTOM_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_duration)],
             CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
             CONFIRM_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_order)],
-            CANCEL_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, cancel)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
