@@ -1,14 +1,13 @@
 import os
+import json
 import logging
+from typing import Dict, Optional, Any, Union
 from pymongo import MongoClient
-from dotenv import load_dotenv
-from telegram import Contact
-from urllib.parse import urlparse, urlunparse
-from typing import Optional, Dict, Any
-from datetime import datetime
 from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+from datetime import datetime
+import certifi
 
 # Налаштування логування
 logging.basicConfig(
@@ -17,270 +16,227 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Завантаження змінних середовища
-load_dotenv()
-
 class UserData:
-    def __init__(self, mongo_uri: str):
-        if not mongo_uri:
-            logger.error("Не знайдено URI MongoDB")
-            raise ValueError("Не знайдено URI MongoDB")
-            
-        # Перевіряємо та модифікуємо URI якщо потрібно
-        parsed = urlparse(mongo_uri)
-        if not parsed.path or parsed.path == '/':
-            # Додаємо назву бази даних, якщо її немає
-            base_uri = mongo_uri.rstrip('/')
-            if '?' in base_uri:
-                base_uri, params = base_uri.split('?', 1)
-                self.mongo_uri = f"{base_uri}/confetti?{params}"
-            else:
-                self.mongo_uri = f"{base_uri}/confetti"
-            logger.info(f"Додано базу даних 'confetti' до URI: {self.mongo_uri}")
-        else:
-            # Якщо база даних вже вказана, просто використовуємо оригінальний URI
-            self.mongo_uri = mongo_uri
-            logger.info(f"Використовуємо існуючий URI з базою даних: {self.mongo_uri}")
-            
-        # Видаляємо подвійні слеші з URI, зберігаючи протокол
-        if self.mongo_uri.startswith('mongodb+srv://'):
-            # Зберігаємо протокол
-            protocol = 'mongodb+srv://'
-            rest = self.mongo_uri[len(protocol):]
-            # Видаляємо подвійні слеші з решти URI
-            rest = rest.replace('//', '/')
-            self.mongo_uri = protocol + rest
-        elif self.mongo_uri.startswith('mongodb://'):
-            # Зберігаємо протокол
-            protocol = 'mongodb://'
-            rest = self.mongo_uri[len(protocol):]
-            # Видаляємо подвійні слеші з решти URI
-            rest = rest.replace('//', '/')
-            self.mongo_uri = protocol + rest
-            
-        logger.info(f"Остаточний URI: {self.mongo_uri}")
-            
+    def __init__(self, mongo_uri: Optional[str] = None):
+        self.users: Dict[str, dict] = {}
+        self.filename = "users.json"
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
-        self.users: Optional[Collection] = None
+        self.users_collection: Optional[Collection] = None
         self.conversations: Optional[Collection] = None
         
-        # Намагаємося підключитися
-        if not self.connect():
-            raise ConnectionError("Не вдалося підключитися до MongoDB")
+        # Спробуємо підключитися до MongoDB
+        if mongo_uri:
+            try:
+                logger.info("Спроба підключення до MongoDB...")
+                self.client = MongoClient(
+                    mongo_uri,
+                    tlsCAFile=certifi.where(),
+                    serverSelectionTimeoutMS=10000,
+                    connectTimeoutMS=10000,
+                    socketTimeoutMS=10000,
+                    maxPoolSize=1,
+                    waitQueueTimeoutMS=10000,
+                    retryWrites=True,
+                    w='majority'
+                )
+                
+                # Перевіряємо підключення
+                self.client.admin.command('ping')
+                
+                # Отримуємо базу даних
+                self.db = self.client.get_database('confetti')
+                self.users_collection = self.db.users
+                self.conversations = self.db.conversations
+                
+                # Створюємо індекси
+                self._create_indexes()
+                
+                logger.info("Успішно підключено до MongoDB")
+            except Exception as e:
+                logger.error(f"Помилка підключення до MongoDB: {str(e)}")
+                logger.info("Використовую локальне сховище")
+                self.client = None
+                self.users_collection = None
+                self.conversations = None
+        else:
+            logger.info("MONGODB_URI не знайдено, використовую локальне сховище")
+            
+        # Завантажуємо дані
+        self.load_data()
 
-    def connect(self) -> bool:
-        """Підключення до MongoDB"""
+    def _create_indexes(self):
+        """Створення індексів для колекцій"""
         try:
-            # Встановлюємо з'єднання з обмеженням часу
-            self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
-            # Перевіряємо з'єднання
-            self.client.admin.command('ping')
+            # Індекси для користувачів
+            self.users_collection.create_index(
+                [('user_id', 1)],
+                unique=True,
+                partialFilterExpression={'user_id': {'$type': 'number'}}
+            )
             
-            # Отримуємо базу даних
-            parsed = urlparse(self.mongo_uri)
-            db_name = parsed.path.lstrip('/')
-            if not db_name:
-                db_name = 'confetti'
-                
-            logger.info(f"Спроба підключення до бази даних: {db_name}")
-            self.db = self.client[db_name]
-            
-            # Перевіряємо, чи існує база даних
-            try:
-                self.db.command('ping')
-            except Exception as e:
-                logger.error(f"База даних {db_name} не існує або недоступна: {str(e)}")
-                return False
-                
-            self.users = self.db.users
-            self.conversations = self.db.conversations
-            
-            # Видаляємо старі індекси, якщо вони існують
-            try:
-                self.users.drop_index('user_id_1')
-                logger.info("Старий індекс users.user_id видалено")
-            except Exception:
-                logger.info("Індекс users.user_id не існує")
-                
-            try:
-                self.conversations.drop_index('user_id_1')
-                logger.info("Старий індекс conversations.user_id видалено")
-            except Exception:
-                logger.info("Індекс conversations.user_id не існує")
-            
-            # Створюємо нові індекси з частковим фільтром
-            try:
-                self.users.create_index(
-                    [('user_id', 1)],
-                    unique=True,
-                    partialFilterExpression={'user_id': {'$type': 'number'}}
-                )
-                self.conversations.create_index(
-                    [('user_id', 1)],
-                    unique=True,
-                    partialFilterExpression={'user_id': {'$type': 'number'}}
-                )
-                logger.info("Нові індекси успішно створено")
-            except Exception as e:
-                logger.error(f"Помилка створення індексів: {str(e)}")
-                return False
-            
-            logger.info(f"Успішно підключено до MongoDB, база даних: {self.db.name}")
-            return True
-        except ServerSelectionTimeoutError as e:
-            logger.error(f"Помилка підключення до MongoDB (таймаут): {str(e)}")
-            return False
-        except PyMongoError as e:
-            logger.error(f"Помилка підключення до MongoDB: {str(e)}")
-            return False
+            # Індекси для розмов
+            self.conversations.create_index(
+                [('user_id', 1)],
+                unique=True,
+                partialFilterExpression={'user_id': {'$type': 'number'}}
+            )
+            logger.info("Індекси успішно створено")
         except Exception as e:
-            logger.error(f"Неочікувана помилка при підключенні до MongoDB: {str(e)}")
-            return False
+            logger.error(f"Помилка створення індексів: {str(e)}")
+
+    def load_data(self):
+        """Завантаження даних з MongoDB або локального файлу"""
+        if self.users_collection is not None:
+            try:
+                cursor = self.users_collection.find({})
+                self.users = {str(doc['_id']): {k: v for k, v in doc.items() if k != '_id'} 
+                            for doc in cursor}
+                logger.info("Дані успішно завантажено з MongoDB")
+            except Exception as e:
+                logger.error(f"Помилка завантаження даних з MongoDB: {e}")
+                self.users = {}
+        else:
+            if os.path.exists(self.filename):
+                try:
+                    with open(self.filename, 'r', encoding='utf-8') as file:
+                        self.users = json.load(file)
+                    logger.info("Дані успішно завантажено з локального файлу")
+                except json.JSONDecodeError:
+                    logger.error("Помилка читання локального файлу")
+                    self.users = {}
+
+    def save_data(self):
+        """Збереження даних в MongoDB або локальний файл"""
+        if self.users_collection is not None:
+            try:
+                for user_id, user_data in self.users.items():
+                    self.users_collection.update_one(
+                        {'_id': user_id},
+                        {'$set': user_data},
+                        upsert=True
+                    )
+                logger.info("Дані успішно збережено в MongoDB")
+            except Exception as e:
+                logger.error(f"Помилка збереження в MongoDB: {e}")
+                self._save_local()
+        else:
+            self._save_local()
+
+    def _save_local(self):
+        """Збереження даних в локальний файл"""
+        try:
+            with open(self.filename, 'w', encoding='utf-8') as file:
+                json.dump(self.users, file, ensure_ascii=False, indent=2)
+            logger.info("Дані успішно збережено локально")
+        except Exception as e:
+            logger.error(f"Помилка збереження локально: {e}")
 
     def ensure_connected(self) -> bool:
-        """Перевіряє підключення та намагається перепідключитися якщо потрібно"""
+        """Перевірка підключення до MongoDB"""
+        if not self.client:
+            return False
+            
         try:
-            if self.db and self.users and self.conversations:
-                # Перевіряємо з'єднання
-                self.client.admin.command('ping')
-                return True
-            else:
-                logger.warning("З'єднання втрачено, намагаємося перепідключитися...")
-                return self.connect()
-        except Exception:
-            logger.warning("Помилка з'єднання, намагаємося перепідключитися...")
-            return self.connect()
+            self.client.server_info()
+            return True
+        except:
+            return False
 
     def save_conversation_state(self, user_id: int, state: Dict[str, Any]) -> bool:
         """Зберігає стан розмови користувача"""
-        if not self.ensure_connected():
-            return False
-            
-        try:
-            state['updated_at'] = datetime.now()
-            self.conversations.update_one(
-                {'user_id': user_id},
-                {'$set': state},
-                upsert=True
-            )
-            logger.info(f"Збережено стан розмови для користувача {user_id}")
-            return True
-        except PyMongoError as e:
-            logger.error(f"Помилка збереження стану розмови: {str(e)}")
-            return False
+        if self.conversations is not None and self.ensure_connected():
+            try:
+                state['updated_at'] = datetime.now()
+                self.conversations.update_one(
+                    {'user_id': user_id},
+                    {'$set': state},
+                    upsert=True
+                )
+                logger.info(f"Збережено стан розмови для користувача {user_id}")
+                return True
+            except Exception as e:
+                logger.error(f"Помилка збереження стану розмови: {str(e)}")
+        return False
 
     def get_conversation_state(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Отримує стан розмови користувача"""
-        if not self.ensure_connected():
-            return None
-            
-        try:
-            state = self.conversations.find_one({'user_id': user_id})
-            if state:
-                state.pop('_id', None)  # Видаляємо _id з результату
-            return state
-        except PyMongoError as e:
-            logger.error(f"Помилка отримання стану розмови: {str(e)}")
-            return None
+        if self.conversations is not None and self.ensure_connected():
+            try:
+                state = self.conversations.find_one({'user_id': user_id})
+                if state:
+                    state.pop('_id', None)
+                return state
+            except Exception as e:
+                logger.error(f"Помилка отримання стану розмови: {str(e)}")
+        return None
 
-    def clear_conversation_state(self, user_id: int) -> bool:
-        """Очищає стан розмови користувача"""
-        if not self.ensure_connected():
-            return False
-            
+    def clear_conversation_state(self, user_id: Union[str, int]) -> None:
+        """Очищає стан розмови для конкретного користувача"""
+        user_id = str(user_id)
         try:
-            self.conversations.delete_one({'user_id': user_id})
-            logger.info(f"Очищено стан розмови для користувача {user_id}")
-            return True
-        except PyMongoError as e:
-            logger.error(f"Помилка очищення стану розмови: {str(e)}")
-            return False
+            if self.conversations is not None and self.ensure_connected():
+                self.conversations.update_one(
+                    {'user_id': user_id},
+                    {'$set': {'state': {}, 'last_updated': datetime.now()}},
+                    upsert=True
+                )
+            else:
+                if not os.path.exists(self.filename):
+                    with open(self.filename, 'w') as f:
+                        json.dump({}, f)
+                
+                with open(self.filename, 'r') as f:
+                    conversations = json.load(f)
+                
+                conversations[user_id] = {
+                    'state': {},
+                    'last_updated': datetime.now().isoformat()
+                }
+                
+                with open(self.filename, 'w') as f:
+                    json.dump(conversations, f)
+                
+        except Exception as e:
+            logger.error(f"Помилка при очищенні стану розмови для користувача {user_id}: {e}")
+            # Якщо виникла помилка, створюємо пустий стан в пам'яті
+            self.users[user_id] = {}
 
     def add_user(self, user_id: int, user_info: dict) -> bool:
         """Додає нового користувача"""
-        if not self.ensure_connected():
-            return False
-            
         try:
+            str_id = str(user_id)
             user_info['created_at'] = datetime.now()
-            self.users.update_one(
-                {'user_id': user_id},
-                {'$set': user_info},
-                upsert=True
-            )
+            self.users[str_id] = user_info
+            
+            if self.users_collection is not None and self.ensure_connected():
+                self.users_collection.update_one(
+                    {'_id': str_id},
+                    {'$set': user_info},
+                    upsert=True
+                )
+            else:
+                self.save_data()
+                
             logger.info(f"Додано/оновлено користувача: {user_id}")
             return True
-        except PyMongoError as e:
+        except Exception as e:
             logger.error(f"Помилка додавання користувача: {str(e)}")
             return False
 
     def get_user(self, user_id: int) -> Optional[dict]:
         """Отримує інформацію про користувача"""
-        if not self.ensure_connected():
-            return None
-            
         try:
-            user = self.users.find_one({'user_id': user_id})
-            if user:
-                user.pop('_id', None)  # Видаляємо _id з результату
-            return user
-        except PyMongoError as e:
+            str_id = str(user_id)
+            if self.users_collection is not None and self.ensure_connected():
+                user = self.users_collection.find_one({'_id': str_id})
+                if user:
+                    return {k: v for k, v in user.items() if k != '_id'}
+            return self.users.get(str_id)
+        except Exception as e:
             logger.error(f"Помилка отримання користувача: {str(e)}")
             return None
 
-    def save_contact(self, user_id: int, contact: Contact) -> bool:
-        """Зберігає контактну інформацію користувача"""
-        if not self.ensure_connected():
-            return False
-            
-        try:
-            contact_data = {
-                'phone_number': contact.phone_number,
-                'first_name': contact.first_name,
-                'last_name': contact.last_name if contact.last_name else None,
-                'user_id': contact.user_id if contact.user_id else None
-            }
-            
-            self.users.update_one(
-                {'user_id': user_id},
-                {'$set': {'contact': contact_data}},
-                upsert=True
-            )
-            logger.info(f"Збережено контакт користувача {user_id}")
-            return True
-        except PyMongoError as e:
-            logger.error(f"Помилка при збереженні контакту користувача {user_id}: {e}")
-            return False
-
-    def get_contact(self, user_id: int) -> dict:
-        """Отримує контактну інформацію користувача"""
-        if not self.ensure_connected():
-            return {}
-            
-        try:
-            user = self.users.find_one({'user_id': user_id})
-            return user.get('contact', {}) if user else {}
-        except PyMongoError as e:
-            logger.error(f"Помилка при отриманні контакту користувача {user_id}: {e}")
-            return {}
-
-# Створення глобального екземпляру з повторними спробами
-max_retries = 3
-retry_count = 0
-user_data = None
-
-while retry_count < max_retries and user_data is None:
-    try:
-        mongo_uri = os.getenv('MONGODB_URI')
-        if not mongo_uri:
-            logger.error("Не знайдено URI MongoDB в змінних середовища")
-            break
-            
-        user_data = UserData(mongo_uri)
-        logger.info("Успішно створено екземпляр UserData")
-    except Exception as e:
-        retry_count += 1
-        logger.error(f"Спроба {retry_count} з {max_retries} невдала: {e}")
-        if retry_count == max_retries:
-            logger.error("Досягнуто максимальну кількість спроб підключення до MongoDB") 
+# Створення глобального екземпляру
+mongo_uri = os.getenv('MONGODB_URI')
+user_data = UserData(mongo_uri) 
