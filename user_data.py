@@ -3,6 +3,7 @@ import logging
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from telegram import Contact
+from urllib.parse import urlparse
 
 # Налаштування логування
 logging.basicConfig(
@@ -22,12 +23,25 @@ class UserData:
             raise ValueError("Не знайдено URI MongoDB")
         
         try:
+            # Додаємо назву бази даних до URI, якщо її немає
+            parsed_uri = urlparse(self.mongo_uri)
+            if not parsed_uri.path or parsed_uri.path == '/':
+                db_name = 'confetti'
+                if '?' in self.mongo_uri:
+                    base_uri, params = self.mongo_uri.split('?', 1)
+                    self.mongo_uri = f"{base_uri}/{db_name}?{params}"
+                else:
+                    self.mongo_uri = f"{self.mongo_uri}/{db_name}"
+                logger.info(f"Додано базу даних {db_name} до URI")
+            else:
+                db_name = parsed_uri.path.strip('/')
+            
             self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
             # Перевіряємо підключення
             self.client.admin.command('ping')
-            self.db = self.client.get_database()
+            self.db = self.client[db_name]
             self.collection = self.db.users
-            logger.info("Успішно підключено до MongoDB")
+            logger.info(f"Успішно підключено до MongoDB, база даних: {db_name}")
         except Exception as e:
             logger.error(f"Помилка підключення до MongoDB: {e}")
             raise
