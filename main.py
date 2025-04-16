@@ -4,7 +4,8 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
-    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES
+    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
+    LOCATION_PDF_FILES
 )
 from user_data import user_data
 from datetime import datetime
@@ -22,6 +23,7 @@ CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION = range(3)
 # Кнопки
 BACK_BUTTON = "⬅️ Назад"
 CONTACT_MANAGER_BUTTON = "📞 Зв'язатися з менеджером"
+SUGGEST_LOCATION_BUTTON = "🗺 Підказати вибір місця проведення"
 
 # Локації для різних типів подій
 LOCATIONS = {
@@ -76,6 +78,7 @@ def create_other_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру для розділу 'Інше'"""
     keyboard = [
         [KeyboardButton(CONTACT_MANAGER_BUTTON)],
+        [KeyboardButton(SUGGEST_LOCATION_BUTTON)],
         [KeyboardButton(BACK_BUTTON)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -199,6 +202,26 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             get_manager_contact_message(city),
             reply_markup=create_other_keyboard()
         )
+        return CHOOSING_EVENT_TYPE
+    
+    if event_type == SUGGEST_LOCATION_BUTTON:
+        # Відправляємо PDF файл з підказками щодо місць проведення
+        city = next((choice['value'] for choice in context.user_data['choices'] 
+                    if choice['type'] == "Місто"), None)
+        pdf_path = LOCATION_PDF_FILES.get(city)
+        try:
+            with open(pdf_path, 'rb') as file:
+                await update.message.reply_document(
+                    document=file,
+                    caption=f"📍 Підказки щодо місць проведення у місті {city}",
+                    reply_markup=create_other_keyboard()
+                )
+        except FileNotFoundError:
+            await update.message.reply_text(
+                "На жаль, файл з підказками тимчасово недоступний. "
+                "Будь ласка, зв'яжіться з менеджером для отримання інформації.",
+                reply_markup=create_other_keyboard()
+            )
         return CHOOSING_EVENT_TYPE
     
     if event_type not in EVENT_TYPES:
