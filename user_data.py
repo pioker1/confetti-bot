@@ -3,8 +3,7 @@ import os
 from typing import Dict, Optional
 from pymongo import MongoClient
 from pymongo.collection import Collection
-import urllib.parse
-import ssl
+import certifi
 
 class UserData:
     def __init__(self):
@@ -15,25 +14,29 @@ class UserData:
         mongodb_url = os.environ.get('MONGODB_URI')
         if mongodb_url:
             try:
-                # Налаштування SSL параметрів
+                print("Спроба підключення до MongoDB...")
+                # Використовуємо стандартні налаштування для Atlas
                 self.client = MongoClient(
                     mongodb_url,
-                    tls=True,
-                    tlsAllowInvalidCertificates=True,
-                    serverSelectionTimeoutMS=5000
+                    retryWrites=True,
+                    w='majority',
+                    tlsCAFile=certifi.where()
                 )
                 
                 # Перевіряємо підключення
-                self.client.server_info()
+                print("Перевірка з'єднання...")
+                self.client.admin.command('ping')
                 
-                self.db = self.client['confetti']
-                self.users_collection: Collection = self.db.users
+                self.db = self.client.get_database('confetti')
+                self.users_collection = self.db.get_collection('users')
                 print("Успішно підключено до MongoDB")
             except Exception as e:
-                print(f"Помилка підключення до MongoDB: {e}")
+                print(f"Помилка підключення до MongoDB: {str(e)}")
+                print("Використовую локальне сховище")
                 self.client = None
                 self.users_collection = None
         else:
+            print("MONGODB_URI не знайдено, використовую локальне сховище")
             self.client = None
             self.users_collection = None
             
