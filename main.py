@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
-    LOCATION_PDF_FILES
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO
 )
 from user_data import user_data
 from datetime import datetime
@@ -24,23 +24,6 @@ CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_LOCATION = range(3)
 BACK_BUTTON = "⬅️ Назад"
 CONTACT_MANAGER_BUTTON = "📞 Зв'язатися з менеджером"
 SUGGEST_LOCATION_BUTTON = "🗺 Підказати вибір місця проведення"
-
-# Локації для різних типів подій
-LOCATIONS = {
-    '🎂 День народження': [
-        '🏠 Вдома',
-        '🍽 Ресторан/Кафе',
-        '🏫 Садочок/Школа',
-        '🏰 Заміський комплекс',
-        '📍 Інше'
-    ],
-    '🎓 Випускний': [
-        '🍽 Ресторан/Кафе',
-        '🏫 Садочок/Школа',
-        '🏰 Заміський комплекс',
-        '📍 Інше'
-    ]
-}
 
 def create_city_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з доступними містами"""
@@ -282,6 +265,8 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     location = update.message.text
     event_type = next((choice['value'] for choice in context.user_data['choices'] 
                       if choice['type'] == "Тип події"), None)
+    city = next((choice['value'] for choice in context.user_data['choices'] 
+                if choice['type'] == "Місто"), None)
     
     if location == BACK_BUTTON:
         # Видаляємо останній вибір
@@ -304,9 +289,19 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     add_choice(context, "Локація", location)
     await save_state(update, context, CHOOSING_LOCATION)
     
-    # Тут буде додано наступний крок (буде реалізовано пізніше)
+    # Якщо обрано "Інше", показуємо додаткові опції
+    if location == '📍 Інше':
+        await update.message.reply_text(
+            f"{LOCATION_INFO[city][location]}\n\n"
+            "Оберіть опцію:",
+            reply_markup=create_other_keyboard()
+        )
+        return CHOOSING_EVENT_TYPE
+    
+    # Для всіх інших локацій
     await update.message.reply_text(
-        "Дякуємо за вибір локації! Наступний крок буде додано незабаром..."
+        f"{LOCATION_INFO[city][location]}\n\n"
+        "Наступний крок буде додано незабаром..."
     )
     
     return ConversationHandler.END
