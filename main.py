@@ -32,12 +32,6 @@ MAIN_MENU_OPTIONS = {
     'make_order': '🎉 Зробити замовлення'
 }
 
-# Контактна інформація менеджера
-MANAGER_INFO = {
-    'phone': '+380123456789',
-    'telegram': 'https://t.me/manager_username',
-    'name': 'Олена'
-}
 
 # Детальний опис послуг з зображеннями та описом
 SERVICE_DETAILS = {
@@ -211,10 +205,10 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
     message = (
-        f"👋 Вітаю! Я {MANAGER_INFO['name']}, ваш менеджер.\n\n"
+        f"👋 Вас вітає підтримка Confetti bot, оберіть метод зв'язку з менеджером\n\n"
         f"📱 Телефон: {MANAGER_INFO['phone']}\n"
         f"📨 Telegram: {MANAGER_INFO['telegram']}\n\n"
-        "Оберіть, будь ласка, що вас цікавить:"
+        "Або оберіть опцію з меню нижче"
     )
     
     await update.message.reply_text(message, reply_markup=reply_markup)
