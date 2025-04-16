@@ -77,27 +77,33 @@ def calculate_total_price(location, duration, services, city=None, district=None
     Returns:
         tuple: (Загальна вартість замовлення, Вартість таксі)
     """
-    # Базова ціна за локацію
-    base_price = BASE_PRICES.get(location, 1500)
-    
-    # Множник за тривалість
-    duration_multiplier = DURATION_MULTIPLIERS.get(duration, 1)
-    
-    # Розрахунок базової вартості
-    total = base_price * duration_multiplier
-    
-    # Додавання вартості додаткових послуг
-    for service in services:
-        service_info = ADDITIONAL_SERVICES.get(service)
-        if service_info:
-            total += service_info['price']
-    
-    # Розрахунок вартості таксі
-    taxi_price = 0
-    if city and district and city in TAXI_PRICES:
-        taxi_price = TAXI_PRICES[city].get(district, TAXI_PRICES[city]['Інше'])
-    
-    return total, taxi_price
+    try:
+        # Базова ціна за локацію
+        base_price = BASE_PRICES.get(location, 1500)
+        
+        # Множник за тривалість
+        duration_multiplier = DURATION_MULTIPLIERS.get(duration, 1)
+        
+        # Розрахунок базової вартості
+        total = base_price * duration_multiplier
+        
+        # Додавання вартості додаткових послуг
+        if services:  # Перевірка на None та пустий список
+            for service in services:
+                service_info = ADDITIONAL_SERVICES.get(service)
+                if service_info and 'price' in service_info:
+                    total += service_info['price']
+        
+        # Розрахунок вартості таксі
+        taxi_price = 0
+        if city and district and city in TAXI_PRICES:
+            city_taxi_prices = TAXI_PRICES[city]
+            taxi_price = city_taxi_prices.get(district, city_taxi_prices.get('Інше', 0))
+        
+        return total, taxi_price
+    except Exception as e:
+        logger.error(f"Помилка при розрахунку вартості: {str(e)}")
+        return 0, 0  # Повертаємо нульову вартість у разі помилки
 
 def format_price_info(location, duration, services, city=None, district=None):
     """
@@ -113,40 +119,50 @@ def format_price_info(location, duration, services, city=None, district=None):
     Returns:
         str: Відформатований текст з інформацією про ціни
     """
-    base_price = BASE_PRICES.get(location, 1500)
-    duration_multiplier = DURATION_MULTIPLIERS.get(duration, 1)
-    base_total = base_price * duration_multiplier
-    
-    info = (
-        f"💰 Розрахунок вартості:\n\n"
-        f"Базова вартість ({location}): {base_price} грн\n"
-        f"Тривалість ({duration}): x{duration_multiplier}\n"
-        f"Базова вартість з урахуванням часу: {base_total} грн\n\n"
-    )
-    
-    if services:
-        info += "Додаткові послуги:\n"
+    try:
+        # Розрахунок базової вартості
+        base_price = BASE_PRICES.get(location, 1500)
+        duration_multiplier = DURATION_MULTIPLIERS.get(duration, 1)
+        base_total = base_price * duration_multiplier
+        
+        # Формування базової інформації
+        info = (
+            f"💰 Розрахунок вартості:\n\n"
+            f"Базова вартість ({location}): {base_price} грн\n"
+            f"Тривалість ({duration}): x{duration_multiplier}\n"
+            f"Базова вартість з урахуванням часу: {base_total} грн\n\n"
+        )
+        
+        # Розрахунок вартості додаткових послуг
         services_total = 0
-        for service in services:
-            service_info = ADDITIONAL_SERVICES.get(service)
-            if service_info:
-                price = service_info['price']
-                services_total += price
-                info += f"• {service}: {price} грн\n"
-        info += f"\nВартість додаткових послуг: {services_total} грн\n"
-        info += f"Загальна вартість послуг: {base_total + services_total} грн\n"
-    else:
-        info += f"Загальна вартість послуг: {base_total} грн\n"
-    
-    # Додавання інформації про таксі
-    if city and district:
-        taxi_price = TAXI_PRICES.get(city, {}).get(district, TAXI_PRICES.get(city, {}).get('Інше', 0))
-        if taxi_price:
-            info += f"\n🚕 Вартість таксі (туди/назад): {taxi_price} грн\n"
-            info += f"Загальна вартість з таксі: {base_total + services_total + taxi_price} грн\n\n"
-            info += TAXI_PRICE_DISCLAIMER
-    
-    return info
+        if services:
+            info += "Додаткові послуги:\n"
+            for service in services:
+                service_info = ADDITIONAL_SERVICES.get(service)
+                if service_info and 'price' in service_info:
+                    price = service_info['price']
+                    services_total += price
+                    info += f"• {service}: {price} грн\n"
+            info += f"\nВартість додаткових послуг: {services_total} грн\n"
+        
+        # Загальна вартість послуг
+        total_services = base_total + services_total
+        info += f"Загальна вартість послуг: {total_services} грн\n"
+        
+        # Розрахунок вартості таксі
+        if city and district:
+            city_taxi_prices = TAXI_PRICES.get(city, {})
+            taxi_price = city_taxi_prices.get(district, city_taxi_prices.get('Інше', 0))
+            
+            if taxi_price:
+                info += f"\n🚕 Вартість таксі (туди/назад): {taxi_price} грн\n"
+                info += f"Загальна вартість з таксі: {total_services + taxi_price} грн\n\n"
+                info += TAXI_PRICE_DISCLAIMER
+        
+        return info
+    except Exception as e:
+        logger.error(f"Помилка при форматуванні інформації про ціни: {str(e)}")
+        return "Виникла помилка при розрахунку вартості. Будь ласка, спробуйте ще раз."
 
 async def send_to_manager(context: ContextTypes.DEFAULT_TYPE, user_info: dict, message: str):
     """
