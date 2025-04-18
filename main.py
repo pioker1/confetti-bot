@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN
 )
 from user_data import user_data
 from datetime import datetime
@@ -66,18 +66,55 @@ def create_other_keyboard() -> ReplyKeyboardMarkup:
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def create_theme_keyboard() -> ReplyKeyboardMarkup:
+def create_theme_keyboard(context: ContextTypes.DEFAULT_TYPE = None) -> ReplyKeyboardMarkup:
     """Створює клавіатуру з тематиками свят"""
     keyboard = []
-    # Додаємо тематики по 2 в рядок
-    for i in range(0, len(THEMES) - 1, 2):  # -1 щоб не включати "Зв'язатись з менеджером" в пари
-        row = [KeyboardButton(THEMES[i])]
-        if i + 1 < len(THEMES) - 1:  # -1 з тієї ж причини
-            row.append(KeyboardButton(THEMES[i + 1]))
-        keyboard.append(row)
+    
+    # Якщо передано контекст, перевіряємо чи є вже вибрана тематика
+    if context and 'choices' in context.user_data:
+        # Шукаємо останню вибрану тематику
+        theme_choice = next((choice for choice in reversed(context.user_data['choices']) 
+                           if choice['type'] == "Тематика"), None)
+        
+        if theme_choice and theme_choice['value'] in THEME_BTN:
+            # Якщо тематика вибрана, показуємо підтеми
+            subthemes = THEME_BTN[theme_choice['value']]
+            # Додаємо підтеми по 2 в рядок
+            for i in range(0, len(subthemes), 2):
+                row = [KeyboardButton(subthemes[i])]
+                if i + 1 < len(subthemes):
+                    row.append(KeyboardButton(subthemes[i + 1]))
+                keyboard.append(row)
+        else:
+            # Якщо тематика не вибрана або не має підтем, показуємо основні тематики
+            for i in range(0, len(THEMES) - 1, 2):  # -1 щоб не включати "Зв'язатись з менеджером" в пари
+                row = [KeyboardButton(THEMES[i])]
+                if i + 1 < len(THEMES) - 1:  # -1 з тієї ж причини
+                    row.append(KeyboardButton(THEMES[i + 1]))
+                keyboard.append(row)
+    else:
+        # Якщо контекст не передано, показуємо основні тематики
+        for i in range(0, len(THEMES) - 1, 2):
+            row = [KeyboardButton(THEMES[i])]
+            if i + 1 < len(THEMES) - 1:
+                row.append(KeyboardButton(THEMES[i + 1]))
+            keyboard.append(row)
+    
     # Додаємо "Зв'язатись з менеджером" окремим рядком
     keyboard.append([KeyboardButton(THEMES[-1])])
     # Додаємо кнопку "Назад"
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def create_choise_theme_keyboard() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру обраній темі"""
+    keyboard = []
+    for i in range(0, len(THEME_BTN[theme]) - 1, 2):
+        row = [KeyboardButton(THEME_BTN[theme][i])]
+        if i + 1 < len(THEME_BTN[theme]) - 1:
+            row.append(KeyboardButton(THEME_BTN[theme][i + 1]))
+        keyboard.append(row)
     keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -337,7 +374,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Для всіх інших локацій переходимо до вибору тематики
     await update.message.reply_text(
         "Оберіть тематику свята:",
-        reply_markup=create_theme_keyboard()
+        reply_markup=create_theme_keyboard(context)
     )
     
     return CHOOSING_THEME
@@ -359,11 +396,12 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                     reply_markup=create_location_keyboard(event_type)
                 )
                 return CHOOSING_LOCATION
-            else:
+            elif last_choice['type'] == "Тематика":
+                # Якщо була вибрана підтема, повертаємося до вибору основної тематики
                 await save_state(update, context, CHOOSING_THEME)
                 await update.message.reply_text(
                     "Оберіть тематику свята:",
-                    reply_markup=create_theme_keyboard()
+                    reply_markup=create_theme_keyboard(context)
                 )
                 return CHOOSING_THEME
     
@@ -379,28 +417,51 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             
         await update.message.reply_text(
             get_manager_contact_message(city),
-            reply_markup=create_theme_keyboard()
+            reply_markup=create_theme_keyboard(context)
         )
         return CHOOSING_THEME
     
-    if theme not in THEMES:
+    # Перевіряємо, чи це підтема
+    theme_choice = next((choice for choice in reversed(context.user_data.get('choices', [])) 
+                        if choice['type'] == "Тематика"), None)
+    
+    if theme_choice and theme_choice['value'] in THEME_BTN and theme in THEME_BTN[theme_choice['value']]:
+        # Якщо це підтема, зберігаємо її
+        add_choice(context, "Підтема", theme)
+        
+        # Показуємо опис обраної підтеми та завершуємо розмову
         await update.message.reply_text(
-            "Будь ласка, оберіть тематику зі списку:",
-            reply_markup=create_theme_keyboard()
+            f"✨ {theme_choice['value']} - {theme}\n\n"
+            f"Наш менеджер зв'яжеться з вами найближчим часом для уточнення деталей!"
         )
-        return CHOOSING_THEME
+        return ConversationHandler.END
     
-    # Зберігаємо вибір тематики
-    add_choice(context, "Тематика", theme)
+    # Якщо це основна тематика
+    if theme in THEMES:
+        # Зберігаємо вибір тематики
+        add_choice(context, "Тематика", theme)
+        
+        if theme in THEME_BTN:
+            # Якщо у тематики є підтеми, показуємо їх
+            await update.message.reply_text(
+                f"Оберіть підтему для {theme}:",
+                reply_markup=create_theme_keyboard(context)
+            )
+            return CHOOSING_THEME
+        else:
+            # Якщо підтем немає, завершуємо розмову
+            await update.message.reply_text(
+                f"✨ {theme}\n\n"
+                f"{THEME_INFO[theme]}\n\n"
+                "Наш менеджер зв'яжеться з вами найближчим часом для уточнення деталей!"
+            )
+            return ConversationHandler.END
     
-    # Показуємо опис обраної тематики та завершуємо розмову
     await update.message.reply_text(
-        f"✨ {theme}\n\n"
-        f"{THEME_INFO[theme]}\n\n"
-        "Наш менеджер зв'яжеться з вами найближчим часом для уточнення деталей!"
+        "Будь ласка, оберіть тематику зі списку:",
+        reply_markup=create_theme_keyboard(context)
     )
-    
-    return ConversationHandler.END
+    return CHOOSING_THEME
 
 async def save_state(update: Update, context: ContextTypes.DEFAULT_TYPE, state: int) -> None:
     """Зберігає поточний стан розмови"""
