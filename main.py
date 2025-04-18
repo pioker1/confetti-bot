@@ -3,7 +3,7 @@ import os
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
-    TELEGRAM_BOT_TOKEN, CITIES, MANAGER_CHAT_ID, EVENT_TYPES,
+    TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
     LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO
 )
@@ -194,8 +194,15 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if event_type == CONTACT_MANAGER_BUTTON:
         # Показуємо контакти менеджера
-        city = next((choice['value'] for choice in context.user_data['choices'] 
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
+        if not city:
+            await update.message.reply_text(
+                "Спочатку оберіть місто:",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
         await update.message.reply_text(
             get_manager_contact_message(city),
             reply_markup=create_other_keyboard()
@@ -204,8 +211,15 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if event_type == SUGGEST_LOCATION_BUTTON:
         # Відправляємо PDF файл з підказками щодо місць проведення
-        city = next((choice['value'] for choice in context.user_data['choices'] 
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
+        if not city:
+            await update.message.reply_text(
+                "Спочатку оберіть місто:",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
         pdf_path = LOCATION_PDF_FILES.get(city)
         try:
             with open(pdf_path, 'rb') as file:
@@ -234,8 +248,15 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # Обробка спеціальних гілок
     if '📅 Афіша подій' in event_type:
-        city = next((choice['value'] for choice in context.user_data['choices'] 
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
+        if not city:
+            await update.message.reply_text(
+                "Спочатку оберіть місто:",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
         channel_link = CITY_CHANNELS[city]
         await update.message.reply_text(
             f"📅 Афіша подій у місті {city}\n"
@@ -246,15 +267,17 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return CHOOSING_EVENT_TYPE
     
     elif '🎯 Інше' in event_type:
-        city = next((choice['value'] for choice in context.user_data['choices'] 
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
-        # Зберігаємо вибір типу події
-        add_choice(context, "Тип події", event_type)
-        
-        # Показуємо загальну інформацію та клавіатуру з опціями
+        if not city:
+            await update.message.reply_text(
+                "Спочатку оберіть місто:",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
         await update.message.reply_text(
-            f"{GENERAL_INFO[city]}\n\n"
-            "Оберіть опцію:",
+            GENERAL_INFO[city],
             reply_markup=create_other_keyboard()
         )
         return CHOOSING_EVENT_TYPE
@@ -278,20 +301,29 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору локації"""
     location = update.message.text
-    event_type = next((choice['value'] for choice in context.user_data['choices'] 
+    event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
                       if choice['type'] == "Тип події"), None)
-    city = next((choice['value'] for choice in context.user_data['choices'] 
+    city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                 if choice['type'] == "Місто"), None)
     
     if location == BACK_BUTTON:
         # Видаляємо останній вибір
-        remove_last_choice(context)
-        await save_state(update, context, CHOOSING_EVENT_TYPE)
-        await update.message.reply_text(
-            "Оберіть тип події:",
-            reply_markup=create_event_type_keyboard()
-        )
-        return CHOOSING_EVENT_TYPE
+        last_choice = remove_last_choice(context)
+        if last_choice:
+            if last_choice['type'] == "Тип події":
+                await save_state(update, context, CHOOSING_EVENT_TYPE)
+                await update.message.reply_text(
+                    "Оберіть тип події:",
+                    reply_markup=create_event_type_keyboard()
+                )
+                return CHOOSING_EVENT_TYPE
+            else:
+                await save_state(update, context, CHOOSING_LOCATION)
+                await update.message.reply_text(
+                    "Оберіть локацію для події:",
+                    reply_markup=create_location_keyboard(event_type)
+                )
+                return CHOOSING_LOCATION
     
     if event_type and location not in LOCATIONS.get(event_type, []):
         await update.message.reply_text(
@@ -327,19 +359,35 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     
     if theme == BACK_BUTTON:
         # Видаляємо останній вибір
-        remove_last_choice(context)
-        await save_state(update, context, CHOOSING_LOCATION)
-        event_type = next((choice['value'] for choice in context.user_data['choices'] 
-                         if choice['type'] == "Тип події"), None)
-        await update.message.reply_text(
-            "Оберіть локацію для події:",
-            reply_markup=create_location_keyboard(event_type)
-        )
-        return CHOOSING_LOCATION
+        last_choice = remove_last_choice(context)
+        if last_choice:
+            if last_choice['type'] == "Локація":
+                await save_state(update, context, CHOOSING_LOCATION)
+                event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                                if choice['type'] == "Тип події"), None)
+                await update.message.reply_text(
+                    "Оберіть локацію для події:",
+                    reply_markup=create_location_keyboard(event_type)
+                )
+                return CHOOSING_LOCATION
+            else:
+                await save_state(update, context, CHOOSING_THEME)
+                await update.message.reply_text(
+                    "Оберіть тематику свята:",
+                    reply_markup=create_theme_keyboard()
+                )
+                return CHOOSING_THEME
     
     if theme == '📞 Зв\'язатись з менеджером':
-        city = next((choice['value'] for choice in context.user_data['choices'] 
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
+        if not city:
+            await update.message.reply_text(
+                "Спочатку оберіть місто:",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
         await update.message.reply_text(
             get_manager_contact_message(city),
             reply_markup=create_theme_keyboard()
