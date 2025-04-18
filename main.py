@@ -396,14 +396,24 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                     reply_markup=create_location_keyboard(event_type)
                 )
                 return CHOOSING_LOCATION
-            elif last_choice['type'] == "Тематика":
-                # Якщо була вибрана підтема, повертаємося до вибору основної тематики
+            elif last_choice['type'] == "Підтема":
+                # Якщо була вибрана підтема, повертаємося до вибору підтем
                 await save_state(update, context, CHOOSING_THEME)
                 await update.message.reply_text(
-                    "Оберіть тематику свята:",
+                    "Оберіть підтему:",
                     reply_markup=create_theme_keyboard(context)
                 )
                 return CHOOSING_THEME
+            elif last_choice['type'] == "Тематика":
+                # Якщо була вибрана основна тематика, повертаємося до вибору локації
+                await save_state(update, context, CHOOSING_LOCATION)
+                event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                                if choice['type'] == "Тип події"), None)
+                await update.message.reply_text(
+                    "Оберіть локацію для події:",
+                    reply_markup=create_location_keyboard(event_type)
+                )
+                return CHOOSING_LOCATION
     
     if theme == '📞 Зв\'язатись з менеджером':
         city = next((choice['value'] for choice in context.user_data.get('choices', []) 
