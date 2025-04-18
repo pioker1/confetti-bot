@@ -111,17 +111,6 @@ def remove_last_choice(context: ContextTypes.DEFAULT_TYPE) -> dict:
         return last_choice
     return None
 
-def get_current_choices(context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Формує текстове представлення поточних виборів користувача"""
-    initialize_user_choices(context)
-    if not context.user_data['choices']:
-        return "Ще не зроблено жодного вибору"
-    
-    choices_text = "Ваші поточні вибори:\n"
-    for choice in context.user_data['choices']:
-        choices_text += f"• {choice['type']}: {choice['value']}\n"
-    return choices_text
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Початок розмови та повернення до головного меню"""
     user = update.effective_user
