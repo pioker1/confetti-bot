@@ -206,7 +206,7 @@ class UserData:
         """Додає нового користувача"""
         try:
             str_id = str(user_id)
-            user_info['created_at'] = datetime.now()
+            user_info['created_at'] = datetime.now().isoformat()  # Виправлено: зберігаємо як рядок
             self.users[str_id] = user_info
             
             if self.users_collection is not None and self.ensure_connected():
@@ -237,6 +237,6 @@ class UserData:
             logger.error(f"Помилка отримання користувача: {str(e)}")
             return None
 
-# Створення глобального екземпляру
+# Створення глобального екземпляра
 mongo_uri = os.getenv('MONGODB_URI')
 user_data = UserData(mongo_uri) 
