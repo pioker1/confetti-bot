@@ -534,9 +534,11 @@ def calculate_total_price(context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list
 # ============================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Початок розмови та повернення до головного меню"""
+    logger.info(f"[START] Викликано start для user_id={update.effective_user.id}, state={context.user_data}")
     user = update.effective_user
     
     # Очищаємо стан розмови
+    context.user_data.clear()
     user_data.clear_conversation_state(user.id)
     
     # Зберігаємо базову інформацію про користувача
@@ -548,11 +550,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     }
     user_data.add_user(user.id, user_info)
     
+    # Скидаємо стару клавіатуру
+    await update.message.reply_text(
+        "Перезапуск меню...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    # Відправляємо привітання з новою клавіатурою
     await update.message.reply_text(
         Hello_World,
         reply_markup=create_city_keyboard()
     )
-    
+    logger.info(f"[START] Завершено start для user_id={update.effective_user.id}")
     return CHOOSING_CITY
 
 async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -727,7 +735,6 @@ async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DE
         
     
     
-    
 async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події для інших подій"""
     event_type = update.message.text
@@ -763,10 +770,10 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not event_type or not city:
             logger.error(f"Тип події або місто не знайдено в виборах користувача. Тип події: {event_type}, Місто: {city}")
             await update.message.reply_text(
-                "Спочатку оберіть тип події:",
-                reply_markup=create_event_type_keyboard()
+                "Спочатку оберіть місто та тип події:",
+                reply_markup=create_city_keyboard()
             )
-            return CHOOSING_EVENT_TYPE
+            return CHOOSING_CITY
 
         if location == BACK_BUTTON:
             remove_choice_by_type(context, 'Локація')
@@ -1118,10 +1125,6 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     if choice['type'] == "Локація"), None)
     
     if text == BACK_BUTTON:
-        # Видаляємо останній формат, якщо він є
-        remove_choice_by_type(context, 'Формат')
-        
-        
         # Повертаємося до деталей теми
         theme = next((choice['value'] for choice in reversed(user_choices) 
                      if choice['type'] == "Тематика"), None)
@@ -1520,13 +1523,13 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 # Якщо місто не знайдено в context.user_data, пробуємо знайти в choices
                 city = next((choice['value'] for choice in user_choices 
                            if choice['type'] == "Місто"), None)
+            
+            if not city:
+                await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
+                return ConversationHandler.END
                 
-                if not city:
-                    await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
-                    return ConversationHandler.END
-                    
-                # Зберігаємо місто в context.user_data для подальшого використання
-                context.user_data['selected_city'] = city
+            # Зберігаємо місто в context.user_data для подальшого використання
+            context.user_data['selected_city'] = city
                 
             await update.message.reply_text(
                 f"🎮 Доступні квести у місті {city}:",
@@ -1641,8 +1644,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         )
                     elif last_choice['type'] == 'Пакет':
                         # Знаходимо тип події для пакету
-                        event_type = next((choice['value'] for choice in reversed(user_choices) 
-                                         if choice['type'] == "Тип події"), None)
+                        event_type = next((c['value'] for c in user_choices if c['type'] == "Тип події"), None)
                         
                         if event_type:
                             # Отримуємо ціну пакету
@@ -2109,6 +2111,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ============================================
 # ОСНОВНА ФУНКЦІЯ
 # ============================================
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info(f"[RESET] Викликано reset для user_id={update.effective_user.id}, state={context.user_data}")
+    context.user_data.clear()
+    user_data.clear_conversation_state(update.effective_user.id)
+    await update.message.reply_text(
+        "Стан скинуто. Почніть спочатку через /start.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
 def main():
     """Запуск бота"""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -2142,6 +2154,9 @@ def main():
     )
     
     application.add_handler(conv_handler)
+    # Додаємо глобальні обробники для /start та /reset
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('reset', reset_command))
     application.run_polling()
 
 if __name__ == '__main__':
