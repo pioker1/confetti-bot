@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # КОНСТАНТИ ТА СТАНИ
 # ============================================
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY = range(20)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT = range(21)
 
 STATE_NAMES = {
     CHOOSING_CITY: 'CHOOSING_CITY',
@@ -54,6 +54,7 @@ STATE_NAMES = {
     CHOOSING_SERVICE_OPTION: 'CHOOSING_SERVICE_OPTION',
     CHOOSING_DISTRICT: 'CHOOSING_DISTRICT',
     CHOOSING_SUMMARY: 'CHOOSING_SUMMARY',
+    PHONE_CONTACT: 'PHONE_CONTACT'
 }
 
 # Кнопки
@@ -764,8 +765,13 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=create_other_keyboard()
             )
             return CHOOSING_EVENT_TYPE_inshe
-
         
+        # elif user_choice == "🎂 День народження":
+        #     await update.message.reply_text(
+        #         "Оберіть локацію для події:",
+        #         reply_markup=create_location_keyboard(user_choice)
+        #     )
+        #     return CHOOSING_LOCATION
 
     except Exception as e:
         logger.error(f"Помилка при обробці вибору в розділі 'Інше': {str(e)}")
@@ -787,9 +793,19 @@ async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DE
         )
         return CHOOSING_EVENT_TYPE
     
+    # elif event_type == "🎂 День народження":
+    #     await update.message.reply_text(
+    #         "Оберіть локацію для події:",
+    #         reply_markup=create_location_keyboard(event_type)
+    #     )
+    #     return CHOOSING_LOCATION
     
-        
-    
+    # elif event_type == "🎓 Випускний":
+    #     await update.message.reply_text(
+    #         "Оберіть локацію для події:",
+    #         reply_markup=create_location_keyboard(event_type)
+    #     )
+    #     return CHOOSING_LOCATION
     
 async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події для інших подій"""
@@ -857,8 +873,8 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         available_locations = LOCATIONS.get(event_type, [])
         if not available_locations:
             logger.warning(f"Не знайдено локацій для типу події: {event_type}")
-            available_locations = ['📍 Інше']
-            
+            available_locations = ['📍 Інше']  # Запасний варіант
+
         if location not in available_locations:
             await update.message.reply_text(
                 "Будь ласка, оберіть локацію зі списку:",
@@ -2005,19 +2021,52 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Додаємо ціни за додаткові послуги
         if 'additional_services' in context.user_data:
             for service, option in context.user_data['additional_services'].items():
-                if "грн" in option:
-                    price = int(option.split("грн")[0].strip().split()[-1])
-                    total_price += price
-                summary += f"➕ {service}: {option}\n"
+                try:
+                    # Перевіряємо, чи є ціна в опції
+                    if ' - ' in option:
+                        # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
+                        price_str = option.split(' - ')[1]
+                        if 'грн' in price_str:
+                            try:
+                                price = int(price_str.split()[0])
+                                total_price += price
+                                summary += f"➕ {service}: {option}\n"
+                            except ValueError:
+                                summary += f"➕ {service}: {option}\n"
+                        else:
+                            summary += f"➕ {service}: {option}\n"
+                    else:
+                        # Для майстер-класів та інших послуг з форматом "НАЗВА - ДЕТАЛІ - ЦІНА"
+                        try:
+                            # Розбиваємо рядок на частини
+                            parts = option.split(' - ')
+                            if len(parts) >= 2:
+                                # Беремо останню частину як ціну
+                                price_str = parts[-1]
+                                if 'грн' in price_str:
+                                    price = int(price_str.split()[0])
+                                    total_price += price
+                            summary += f"➕ {service}: {option}\n"
+                        except Exception as e:
+                            logger.error(f"Помилка при обробці ціни для {service}: {str(e)}")
+                            summary += f"➕ {service}: {option}\n"
+                except Exception as e:
+                    logger.error(f"Помилка при обробці ціни додаткової послуги: {str(e)}")
+                    summary += f"➕ {service}: {option}\n"
         
         # Додаємо вартість таксі
         district = next((choice['value'] for choice in choices if choice['type'] == "Район"), None)
-        if district:
-            city = next((choice['value'] for choice in choices if choice['type'] == "Місто"), None)
-            if city and district in TAXI_PRICES[city]:
+        if district and city:
+            try:
                 taxi_price = TAXI_PRICES[city][district]
-                total_price += taxi_price
-                summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
+                if isinstance(taxi_price, (int, float)):
+                    total_price += taxi_price
+                    summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
+                else:
+                    summary += f"🚕 Таксі ({district}): {taxi_price}\n"
+            except Exception as e:
+                logger.error(f"Помилка при обробці ціни таксі: {str(e)}")
+                summary += f"🚕 Таксі ({district}): Ціна уточнюється\n"
         
         # Додаємо загальну вартість
         summary += f"\n💵 Приблизна загальна вартість: {total_price} грн\n"
@@ -2043,6 +2092,8 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         text = update.message.text
         city = context.user_data.get('selected_city')
+        if not city:
+            city = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Місто"), None)
         
         if text == BACK_BUTTON:
             # Видаляємо останній вибір району
@@ -2056,14 +2107,15 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return CHOOSING_DISTRICT
             
         elif text == "📅 Дізнатись час/дату":
-            # Тут буде логіка для вибору часу/дати
+            contact_keyboard = ReplyKeyboardMarkup([
+                [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
+                [KeyboardButton('⬅️ На початок')]
+                ], resize_keyboard=True)
             await update.message.reply_text(
-                "🕒 Функція вибору часу та дати поки недоступна.\n"
-                "Будь ласка, зв'яжіться з менеджером для уточнення деталей."
+                "Будь ласка, натисніть кнопку нижче, щоб надіслати свій номер телефону менеджеру.",
+                reply_markup=contact_keyboard
             )
-            # Показуємо підсумок знову
-            await show_summary(update, context)
-            return CHOOSING_SUMMARY
+            return PHONE_CONTACT
             
         else:
             await update.message.reply_text(
@@ -2076,6 +2128,56 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.error(f"Помилка при обробці вибору в підсумковому меню: {str(e)}")
         await update.message.reply_text(
             "Виникла помилка. Будь ласка, спробуйте ще раз.",
+            reply_markup=create_summary_keyboard()
+        )
+        return CHOOSING_SUMMARY
+
+async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка наданих контактів в підсумковому меню"""
+    try:
+        text = update.message.text
+        if text == "⬅️ На початок":
+            # Очищаємо всі вибори користувача і повертаємо до вибору міста (як /start)
+            context.user_data.clear()
+            await update.message.reply_text(
+                Hello_World,
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+            
+        phone = update.message.contact.phone_number
+        user = update.effective_user
+        contact_info = (
+            f"<b>Контакт від користувача</b>\n"
+            f"ID: <code>{user.id}</code>\n"
+            f"Ім'я: {user.first_name or ''} {user.last_name or ''}\n"
+            f"Username: @{user.username if user.username else '-'}\n"
+            f"Телефон: <code>{phone}</code>"
+        )
+        await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
+        await update.message.reply_text(
+            "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим чаом з вами зв'яжуться для уточнення.",
+            reply_markup=create_city_keyboard()
+        )
+        # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
+        user_info = {
+            'first_name': user.first_name or '',
+            'last_name': user.last_name or '',
+            'username': user.username or '-',
+            'phone_number': phone,
+            'language_code': user.language_code if hasattr(user, 'language_code') else '-',
+            'is_bot': user.is_bot if hasattr(user, 'is_bot') else False,
+            'status': 'contact_shared',
+            'last_update': datetime.now().isoformat(),
+        }
+        user_data.add_user(user.id, user_info)
+        context.user_data.clear()
+        return CHOOSING_CITY
+        
+    except Exception as e:
+        logger.error(f"Помилка при обробці наданих контактів в підсумковому меню: {str(e)}")
+        await update.message.reply_text(
+            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера.",
             reply_markup=create_summary_keyboard()
         )
         return CHOOSING_SUMMARY
@@ -2146,36 +2248,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return CHOOSING_CITY
 
 # ============================================
-# ОСНОВНА ФУНКЦІЯ
+# БЛОК МЕНЕДЖЕРА
 # ============================================
-async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    logger.info(f"[RESET] Викликано reset для user_id={update.effective_user.id}, state={context.user_data}")
-    context.user_data.clear()
-    for key in ['choices', 'selected_city', 'additional_services', 'selected_service']:
-        if key in context.user_data:
-            del context.user_data[key]
-    user_data.clear_conversation_state(update.effective_user.id)
-    await update.message.reply_text(
-        "Стан скинуто. Почніть спочатку через /start.",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    return ConversationHandler.END
-
-async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обробляє команду /restart: очищаємо та починаємо з вибору міста"""
-    logger.info(f"[RESTART] Викликано restart для user_id={update.effective_user.id}")
-    context.user_data.clear()
-    for key in ['choices', 'selected_city', 'additional_services', 'selected_service']:
-        if key in context.user_data:
-            del context.user_data[key]
-    user_data.clear_conversation_state(update.effective_user.id)
-    await update.message.reply_text(
-        "Перезапускаємо діалог! Оберіть місто:",
-        reply_markup=create_city_keyboard()
-    )
-    return CHOOSING_CITY
-
-async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Відправка менеджеру файлу з усіма користувачами у правильному форматі"""
     user_id = update.effective_user.id
     if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
@@ -2193,7 +2268,6 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
             'first_name': info.get('first_name', ''),
             'last_name': info.get('last_name', ''),
             'language_code': info.get('language_code', ''),
-            'phone_number': info.get('phone_number', ''),
             'is_bot': info.get('is_bot', ''),
             'privacy': info.get('type', ''),
             'city': '',  # Заповниться нижче
@@ -2232,6 +2306,97 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
         caption="📋 Список всіх користувачів"
     )
 
+# --- Менеджерські функції ---
+from telegram.constants import ChatAction
+
+async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Розсилка повідомлення/файлу всім користувачам (тільки для менеджера)"""
+    user_id = update.effective_user.id
+    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+        await update.message.reply_text("⛔ Доступ заборонено")
+        return
+    if not context.args and not update.message.reply_to_message:
+        await update.message.reply_text("Введіть текст або зробіть reply до повідомлення з файлом/медіа!")
+        return
+    msg_text = ' '.join(context.args)
+    media_msg = update.message.reply_to_message
+    sent, failed = 0, 0
+    for uid, info in user_data.users.items():
+        chat_id = info.get('chat_id')
+        if not chat_id:
+            continue
+        try:
+            # Відправляємо текст
+            if msg_text.strip():
+                await context.bot.send_message(chat_id=chat_id, text=msg_text, parse_mode='HTML')
+            # Відправляємо медіа з replied повідомлення
+            if media_msg:
+                if media_msg.photo:
+                    await context.bot.send_photo(chat_id=chat_id, photo=media_msg.photo[-1].file_id, caption=msg_text or None)
+                if media_msg.document:
+                    await context.bot.send_document(chat_id=chat_id, document=media_msg.document.file_id, caption=msg_text or None)
+                if media_msg.video:
+                    await context.bot.send_video(chat_id=chat_id, video=media_msg.video.file_id, caption=msg_text or None)
+                if media_msg.audio:
+                    await context.bot.send_audio(chat_id=chat_id, audio=media_msg.audio.file_id, caption=msg_text or None)
+            sent += 1
+        except Exception as e:
+            failed += 1
+    await update.message.reply_text(f'✅ Розіслано: {sent}\n❌ Не вдалося: {failed}')
+
+async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Звернення до конкретного користувача: /hello ID повідомлення (тільки для менеджера)"""
+    user_id = update.effective_user.id
+    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+        await update.message.reply_text("⛔ Доступ заборонено")
+        return
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("Використання: /hello ID повідомлення")
+        return
+    target_id = context.args[0]
+    try:
+        target_id = int(target_id)
+    except ValueError:
+        await update.message.reply_text("ID повинен бути числом!")
+        return
+    msg_text = ' '.join(context.args[1:])
+    try:
+        await context.bot.send_message(chat_id=target_id, text=msg_text)
+        await update.message.reply_text("✅ Надіслано!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Не вдалося: {e}")
+
+# --- Надсилання підсумку менеджеру ---
+async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Формує і надсилає менеджеру всі деталі користувача та замовлення"""
+    user = update.effective_user
+    choices = context.user_data.get('choices', [])
+    additional_services = context.user_data.get('additional_services', {})
+    summary_lines = [
+        f"<b>Нове звернення від користувача</b>",
+        f"ID: <code>{user.id}</code>",
+        f"Ім'я: {user.first_name or ''} {user.last_name or ''}",
+        f"Username: @{user.username if user.username else '-'}",
+        f"Мова: {user.language_code or '-'}",
+        f"\n<b>Вибір користувача:</b>"
+    ]
+    for ch in choices:
+        summary_lines.append(f"• <b>{ch['type']}</b>: {ch['value']}")
+    if additional_services:
+        summary_lines.append("\n<b>Додаткові послуги:</b>")
+        for service, option in additional_services.items():
+            summary_lines.append(f"➕ {service}: {option}")
+    summary = '\n'.join(summary_lines)
+    try:
+        await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=summary, parse_mode='HTML')
+    except Exception as e:
+        logger.error(f"Не вдалося надіслати підсумок менеджеру: {e}")
+
+        
+# ============================================
+# ОСНОВНА ФУНКЦІЯ
+# ============================================
+
 def main():
     """Запуск бота"""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -2260,17 +2425,18 @@ def main():
             CHOOSING_SERVICE_OPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, additional_services_chosen)],
             CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
             CHOOSING_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, summary_chosen)],
+            PHONE_CONTACT: [MessageHandler(filters.CONTACT, summary_chosen_contact_phone)],
         },
-        fallbacks=[CommandHandler('cancel', cancel), CommandHandler('reset', restart_command), CommandHandler('restart', restart_command), CommandHandler('start', start)],
+        fallbacks=[CommandHandler('cancel', cancel), CommandHandler('start', start)],
     )
     
     application.add_handler(conv_handler)
     # Додаємо глобальні обробники для /start та /reset
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('reset', restart_command))
-    application.add_handler(CommandHandler('restart', restart_command))
     application.add_handler(CommandHandler('users', export_users_command))
+    application.add_handler(CommandHandler('all', broadcast_all_command))
+    application.add_handler(CommandHandler('hello', hello_user_command))
     application.run_polling()
 
 if __name__ == '__main__':
-    main() 
+    main()
