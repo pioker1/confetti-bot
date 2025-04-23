@@ -2161,10 +2161,14 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     data = []
     for uid, info in user_data.users.items():
+        try:
+            numeric_uid = int(uid)
+        except (ValueError, TypeError):
+            continue
         row = {'user_id': uid}
         row.update(info)
         # Читаємо вкладений стан або верхній рівень для сумісності
-        raw = user_data.get_conversation_state(int(uid)) or {}
+        raw = user_data.get_conversation_state(numeric_uid) or {}
         conv = raw.get('state', raw)
         # Визначаємо активність за наявністю виборів
         choices = conv.get('choices', [])
