@@ -574,11 +574,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_data.clear_conversation_state(user.id)
     
     # Зберігаємо базову інформацію про користувача
+    old_user = user_data.get_user(user.id)
+    old_phone = old_user.get('phone_number') if old_user else None
+    old_device_info = old_user.get('device_info') if old_user else None
     user_info = {
         'username': user.username,
         'first_name': user.first_name,
         'last_name': user.last_name,
-        'last_interaction': datetime.now().isoformat()
+        'language_code': getattr(user, 'language_code', None),
+        'is_bot': getattr(user, 'is_bot', None),
+        'user_id': user.id,
+        'last_interaction': datetime.now().isoformat(),
+        'start_time': datetime.now().isoformat(),
+        'chat_id': getattr(update.effective_chat, 'id', None),
+        'type': getattr(update.effective_chat, 'type', None),
+        'full_user_obj': user.to_dict() if hasattr(user, 'to_dict') else str(user),
+        'device_info': old_device_info,
+        'phone_number': old_phone
     }
     user_data.add_user(user.id, user_info)
     
@@ -638,6 +650,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if '📅 Афіша подій' in event_type:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                         if choice['type'] == "Місто"), None)
+            
             if not city:
                 await update.message.reply_text(
                     "Спочатку оберіть місто:",
@@ -657,6 +670,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         elif '🎯 Інше' in event_type:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                         if choice['type'] == "Місто"), None)
+            
             if not city:
                 await update.message.reply_text(
                     "Спочатку оберіть місто:",
@@ -673,6 +687,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         elif '👨‍👩‍👧‍👦 Сімейне свято' in event_type:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                         if choice['type'] == "Місто"), None)
+            
             if not city:
                 await update.message.reply_text(
                     "Спочатку оберіть місто:",
