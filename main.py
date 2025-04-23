@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, QWEST_PHOTOS, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, QWEST_PHOTOS, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -53,12 +53,13 @@ logger = logging.getLogger(__name__)
 # КОНСТАНТИ ТА СТАНИ
 # ============================================
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT = range(21)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(22)
 
 STATE_NAMES = {
     CHOOSING_CITY: 'CHOOSING_CITY',
     CHOOSING_EVENT_TYPE: 'CHOOSING_EVENT_TYPE',
     CHOOSING_EVENT_TYPE_Sim_svjata: 'CHOOSING_EVENT_TYPE_Sim_svjata',
+    FFMILY_DOP: 'FFMILY_DOP',
     CHOOSING_EVENT_TYPE_inshe: 'CHOOSING_EVENT_TYPE_inshe',
     CHOOSING_EVENT_TYPE_afisha: 'CHOOSING_EVENT_TYPE_afisha',
     CHOOSING_LOCATION: 'CHOOSING_LOCATION',
@@ -210,12 +211,19 @@ def create_other_keyboard() -> ReplyKeyboardMarkup:
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def create_sim_svjata_keyboard() -> ReplyKeyboardMarkup:
-    """Створює клавіатуру для розділу 'Інше'"""
-    keyboard = [
-        
-        [KeyboardButton(BACK_BUTTON)]
-    ]
+def create_sim_svjata_keyboard_with_back(famaly_trip, city=None):
+    """Створює клавіатуру для сімейних свят з кнопкою назад та цінами"""
+    keyboard = []
+    # Якщо місто задано, беремо лише його сервіси, інакше всі сервіси першого міста
+    if city and city in famaly_trip:
+        services = famaly_trip[city]
+    else:
+        # Якщо місто не задано, показуємо сервіси першого міста (наприклад, Київ)
+        services = next(iter(famaly_trip.values()))
+    for service, price in services.items():
+        button_text = f"{service} - {price} грн"
+        keyboard.append([KeyboardButton(button_text)])
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def create_location_keyboard(event_type: str) -> ReplyKeyboardMarkup:
@@ -713,9 +721,11 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 )
                 return CHOOSING_CITY
                 
+            from config import FAMILY_INFO, FAMALY_TRIP
+            add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
-                GENERAL_INFO[city],
-                reply_markup=create_sim_svjata_keyboard()
+                FAMILY_INFO,
+                reply_markup=create_sim_svjata_keyboard_with_back(FAMALY_TRIP, city)
             )
             return CHOOSING_EVENT_TYPE_Sim_svjata
         
@@ -794,35 +804,135 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
 
 async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події для святкових подій"""
-    event_type = update.message.text
+    text = update.message.text
     
-    if event_type == BACK_BUTTON:
+    if text == BACK_BUTTON:
         remove_choice_by_type(context, 'Тип події')
         await update.message.reply_text(
             "Оберіть тип події знову:",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
+    # Підтримка всіх послуг із FAMALY_TRIP
+    famaly_services = [f"{service} - {price} грн" for city_services in FAMALY_TRIP.values() for service, price in city_services.items()]
+    if text in famaly_services:
+        add_choice(context, 'Додаткова опція сімейної поїздки', text)
+        context.user_data['service'] = text
+        # Місто та тип події (з choices)
+        if 'city' not in context.user_data:
+            city = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Місто"), None)
+            if city is None:
+                city = 'Невідомо'
+            context.user_data['city'] = city
+        if 'event_type' not in context.user_data:
+            event_type = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Тип події"), None)
+            if event_type is None:
+                event_type = 'Невідомо'
+            context.user_data['event_type'] = event_type
+        await update.message.reply_text(
+            FAMILY_INFO_INFO2,
+            reply_markup=ReplyKeyboardMarkup([
+                [KeyboardButton(CONTACT_MANAGER_BUTTON)],
+                [KeyboardButton(BACK_BUTTON)]
+            ], resize_keyboard=True)
+        )
+        return FFMILY_DOP
+    else:
+    # Якщо введено випадковий текст, просимо скористатися кнопками
+        await update.message.reply_text(
+            "Будь ласка, скористайтеся кнопками нижче.",
+            reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton(option)] for option in famaly_services] + [[KeyboardButton(BACK_BUTTON)]],
+                resize_keyboard=True
+            )
+        )
+        return CHOOSING_EVENT_TYPE_Sim_svjata
     
-    # elif event_type == "🎂 День народження":
+    
+    # elif text == "🎂 День народження":
     #     await update.message.reply_text(
     #         "Оберіть локацію для події:",
-    #         reply_markup=create_location_keyboard(event_type)
+    #         reply_markup=create_location_keyboard(text)
     #     )
     #     return CHOOSING_LOCATION
     
-    # elif event_type == "🎓 Випускний":
+    # elif text == "🎓 Випускний":
     #     await update.message.reply_text(
     #         "Оберіть локацію для події:",
-    #         reply_markup=create_location_keyboard(event_type)
+    #         reply_markup=create_location_keyboard(text)
     #     )
     #     return CHOOSING_LOCATION
+
+async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Обробка вибору додаткової опції для сімейного свята : показує кнопки 'Зв'язатися з менеджером' і 'Назад'."""
+        text = update.message.text
+        add_choice(context, 'Додаткова опція сімейного свята', text)
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton(CONTACT_MANAGER_BUTTON)],
+            [KeyboardButton(BACK_BUTTON)]
+        ], resize_keyboard=True)
+        text = update.message.text
+        if text == CONTACT_MANAGER_BUTTON:
+            # Збираємо деталі замовлення
+            # Запам'ятати місто, тип події, послугу якщо ще не збережено
+            if 'city' not in context.user_data:
+                city = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Місто"), 'Невідомо')
+                context.user_data['city'] = city
+            if 'event_type' not in context.user_data:
+                event_type = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Тип події"), 'Невідомо')
+                context.user_data['event_type'] = event_type
+            if 'service' not in context.user_data:
+                context.user_data['service'] = text
+            user = update.effective_user
+            city = context.user_data.get('city', 'Невідомо')
+            event_type = context.user_data.get('event_type', 'Сімейне свято')
+            service = context.user_data.get('service', text)
+            order_message = (
+                f"Нове замовлення на сімейне свято!\n"
+                f"Місто: {city}\n"
+                f"Тип події: {event_type}\n"
+                f"Послуга: {service}\n"
+                f"Ім'я: {user.full_name}\n"
+                f"Username: @{user.username if user.username else 'немає'}\n"
+                f"User ID: {user.id}\n\n"
+                "Замовлення сімейного свята\n"
+            )
+            await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=order_message)
+            
+            # Відповідь користувачу
+            await update.message.reply_text(
+                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
+                    [KeyboardButton('⬅️ На початок')]
+                ], resize_keyboard=True)
+            )
+            return PHONE_CONTACT
+            
+        elif text == BACK_BUTTON:
+            city = context.user_data.get('city', 'Невідомо')
+            await update.message.reply_text(
+                FAMILY_INFO,
+                reply_markup=create_sim_svjata_keyboard_with_back(FAMALY_TRIP, city)
+            )   
+            return CHOOSING_EVENT_TYPE_Sim_svjata
+        else:
+            await update.message.reply_text(
+                "Будь ласка, скористайтеся кнопками нижче.",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton(CONTACT_MANAGER_BUTTON)],
+                    [KeyboardButton(BACK_BUTTON)]
+                ], resize_keyboard=True)
+            )
+            return FFMILY_DOP
+
+
     
 async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події для інших подій"""
-    event_type = update.message.text
+    text = update.message.text
     
-    if event_type == BACK_BUTTON:
+    if text == BACK_BUTTON:
         remove_choice_by_type(context, 'Тип події')
         remove_choice_by_type(context, 'Місто')
         await update.message.reply_text(
@@ -1905,7 +2015,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
         
         logger.warning(f"Отримано неочікуваний текст: {text}")
         await update.message.reply_text(
-            "Будь ласка, виберіть послугу зі списку.",
+            "Будь ласка, використовуйте кнопки для вибору опції.",
             reply_markup=create_additional_services_keyboard(city, context)
         )
         return CHOOSING_ADDITIONAL_SERVICES
@@ -2425,6 +2535,7 @@ def main():
             CHOOSING_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city_chosen)],
             CHOOSING_EVENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen)],
             CHOOSING_EVENT_TYPE_Sim_svjata: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen__Sim_svjata)],
+            FFMILY_DOP: [MessageHandler(filters.TEXT & ~filters.COMMAND, family_dop_chosen)],
             CHOOSING_EVENT_TYPE_inshe: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen_inshe)],
             CHOOSING_EVENT_TYPE_afisha: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen_afisha)],
             CHOOSING_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen)],
@@ -2443,6 +2554,7 @@ def main():
             CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
             CHOOSING_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, summary_chosen)],
             PHONE_CONTACT: [MessageHandler(filters.CONTACT, summary_chosen_contact_phone)],
+            
         },
         fallbacks=[CommandHandler('cancel', cancel), CommandHandler('start', start)],
     )
