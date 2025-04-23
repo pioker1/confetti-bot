@@ -7,7 +7,7 @@ import re
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
-    TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES, EVENT_TYPES_LIST,
+    TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
     LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, QWEST_PHOTOS, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES
 )
@@ -16,6 +16,28 @@ from datetime import datetime
 import telegram.ext._updater as _updater_module
 import pandas as pd
 from io import BytesIO
+
+# --- ФУНКЦІЯ УНІФІКАЦІЇ КОРИСТУВАЧА ---
+def get_unified_user_info(user, old_user=None, update=None, chat=None, phone=None):
+    now = datetime.now().isoformat()
+    return {
+        'user_id': getattr(user, 'id', None),
+        'username': getattr(user, 'username', None),
+        'first_name': getattr(user, 'first_name', None),
+        'last_name': getattr(user, 'last_name', None),
+        'language_code': getattr(user, 'language_code', None),
+        'is_bot': getattr(user, 'is_bot', None),
+        'status': (old_user or {}).get('status', None),
+        'last_update': now,
+        'created_at': (old_user or {}).get('created_at', now),
+        'phone_number': phone or (old_user or {}).get('phone_number', None),
+        'chat_id': getattr(chat, 'id', None) if chat else (old_user or {}).get('chat_id', None),
+        'type': getattr(chat, 'type', None) if chat else (old_user or {}).get('type', None),
+        'full_user_obj': user.to_dict() if hasattr(user, 'to_dict') else str(user),
+        'device_info': (old_user or {}).get('device_info', None),
+        'visits': (old_user or {}).get('visits', 0),
+        'order_count': (old_user or {}).get('order_count', 0),
+    }
 
 # Додаємо slot для `_Updater__polling_cleanup_cb` щоб уникнути AttributeError при build()
 _updater_module.Updater.__slots__ = (*_updater_module.Updater.__slots__, '_Updater__polling_cleanup_cb')
@@ -586,23 +608,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     old_visits = old_user.get('visits', 0) if old_user else 0
     old_order_count = old_user.get('order_count', 0) if old_user else 0
     visits = old_visits + 1
-    user_info = {
-        'username': user.username,
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'language_code': getattr(user, 'language_code', None),
-        'is_bot': getattr(user, 'is_bot', None),
-        'user_id': user.id,
-        'last_interaction': datetime.now().isoformat(),
-        'start_time': datetime.now().isoformat(),
-        'chat_id': getattr(update.effective_chat, 'id', None),
-        'type': getattr(update.effective_chat, 'type', None),
-        'full_user_obj': user.to_dict() if hasattr(user, 'to_dict') else str(user),
-        'device_info': old_device_info,
-        'phone_number': old_phone,
-        'visits': visits,
-        'order_count': old_order_count
-    }
+    user_info = get_unified_user_info(user, old_user, update)
+    user_info['visits'] = visits
     user_data.add_user(user.id, user_info)
     
     # Скидаємо стару клавіатуру
@@ -1985,7 +1992,8 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Додаємо на початку функції (після отримання choices):
         city = context.user_data.get('selected_city')
         if not city:
-            city = next((choice['value'] for choice in choices if choice['type'] == "Місто"), None)
+            city = next((choice['value'] for choice in choices 
+                        if choice['type'] == "Місто"), None)
         
         # Підраховуємо загальну вартість
         total_price = 0
@@ -2179,16 +2187,8 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
             reply_markup=create_city_keyboard()
         )
         # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
-        user_info = {
-            'first_name': user.first_name or '',
-            'last_name': user.last_name or '',
-            'username': user.username or '-',
-            'phone_number': phone,
-            'language_code': user.language_code if hasattr(user, 'language_code') else '-',
-            'is_bot': user.is_bot if hasattr(user, 'is_bot') else False,
-            'status': 'contact_shared',
-            'last_update': datetime.now().isoformat(),
-        }
+        user_info = get_unified_user_info(user, user_data.get_user(user.id), update)
+        user_info['phone_number'] = phone
         user_data.add_user(user.id, user_info)
         context.user_data.clear()
         return CHOOSING_CITY
@@ -2282,37 +2282,28 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
         except (ValueError, TypeError):
             continue
         row = {
-            'chat_id': info.get('chat_id', ''),
+            'user_id': info.get('user_id', ''),
             'username': info.get('username', ''),
             'first_name': info.get('first_name', ''),
             'last_name': info.get('last_name', ''),
             'language_code': info.get('language_code', ''),
             'is_bot': info.get('is_bot', ''),
-            'privacy': info.get('type', ''),
-            'city': '',  # Заповниться нижче
+            'status': info.get('status', ''),
+            'last_update': info.get('last_update', ''),
+            'created_at': info.get('created_at', ''),
+            'phone_number': info.get('phone_number', ''),
+            'chat_id': info.get('chat_id', ''),
+            'type': info.get('type', ''),
+            'city': info.get('city', ''),
             'order_count': info.get('order_count', 0),
-            'last_interaction': info.get('last_interaction', ''),
-            'status': '',  # Заповниться нижче
-            'last_update': '',  # Заповниться нижче
-            'created_at': info.get('created_at', '')
+            'visits': info.get('visits', 0),
+            'device_info': info.get('device_info', ''),
         }
-        # Дістаємо стан розмови
-        raw = user_data.get_conversation_state(numeric_uid) or {}
-        conv = raw.get('state', raw)
-        choices = conv.get('choices', [])
-        # Місто
-        for choice in choices:
-            if choice.get('type') == 'Місто':
-                row['city'] = choice.get('value', '')
-        # Статус
-        row['status'] = 'active' if choices else 'inactive'
-        # Час останнього оновлення
-        row['last_update'] = conv.get('last_update') or raw.get('last_updated') or info.get('last_interaction', '')
         data.append(row)
     # Формуємо DataFrame з потрібним порядком колонок
     columns = [
-        'chat_id', 'username', 'first_name', 'last_name', 'language_code', 'phone_number',
-        'is_bot', 'privacy', 'city', 'order_count', 'last_interaction', 'status', 'last_update', 'created_at'
+        'user_id', 'username', 'first_name', 'last_name', 'language_code', 'phone_number',
+        'is_bot', 'status', 'last_update', 'created_at', 'chat_id', 'type', 'city', 'order_count', 'visits', 'device_info'
     ]
     df = pd.DataFrame(data, columns=columns)
     buffer = BytesIO()
