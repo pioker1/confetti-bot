@@ -3,15 +3,22 @@
 # ============================================
 import logging
 import os
+import re
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES, EVENT_TYPES_LIST,
-    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES,
+    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
     LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, QWEST_PHOTOS, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES
 )
 from user_data import user_data
 from datetime import datetime
+import telegram.ext._updater as _updater_module
+import pandas as pd
+from io import BytesIO
+
+# Додаємо slot для `_Updater__polling_cleanup_cb` щоб уникнути AttributeError при build()
+_updater_module.Updater.__slots__ = (*_updater_module.Updater.__slots__, '_Updater__polling_cleanup_cb')
 
 # Налаштування логування
 logging.basicConfig(
@@ -25,6 +32,29 @@ logger = logging.getLogger(__name__)
 # ============================================
 # Стани розмови
 CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY = range(20)
+
+STATE_NAMES = {
+    CHOOSING_CITY: 'CHOOSING_CITY',
+    CHOOSING_EVENT_TYPE: 'CHOOSING_EVENT_TYPE',
+    CHOOSING_EVENT_TYPE_Sim_svjata: 'CHOOSING_EVENT_TYPE_Sim_svjata',
+    CHOOSING_EVENT_TYPE_inshe: 'CHOOSING_EVENT_TYPE_inshe',
+    CHOOSING_EVENT_TYPE_afisha: 'CHOOSING_EVENT_TYPE_afisha',
+    CHOOSING_LOCATION: 'CHOOSING_LOCATION',
+    CHOOSING_LOCATION_inshe: 'CHOOSING_LOCATION_inshe',
+    CHOOSING_THEME: 'CHOOSING_THEME',
+    CHOOSING_THEME2: 'CHOOSING_THEME2',
+    CHOOSING_THEME_DETAILS: 'CHOOSING_THEME_DETAILS',
+    CHOOSING_FORMAT: 'CHOOSING_FORMAT',
+    CHOOSING_HOURLY_PRICE: 'CHOOSING_HOURLY_PRICE',
+    CHOOSING_PACKAGE: 'CHOOSING_PACKAGE',
+    CHOOSING_QWEST: 'CHOOSING_QWEST',
+    CHOOSING_QWEST_DURATION: 'CHOOSING_QWEST_DURATION',
+    CHOOSING_FINAL: 'CHOOSING_FINAL',
+    CHOOSING_ADDITIONAL_SERVICES: 'CHOOSING_ADDITIONAL_SERVICES',
+    CHOOSING_SERVICE_OPTION: 'CHOOSING_SERVICE_OPTION',
+    CHOOSING_DISTRICT: 'CHOOSING_DISTRICT',
+    CHOOSING_SUMMARY: 'CHOOSING_SUMMARY',
+}
 
 # Кнопки
 BACK_BUTTON = "⬅️ Назад"
@@ -424,20 +454,22 @@ def calculate_total_price(context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list
         # Додаємо ціну за основну послугу (квест, пакет або погодинна оплата)
         for choice in choices:
             if choice['type'] == 'Квест':
+                import re
+                city = next((c['value'] for c in choices if c['type'] == "Місто"), None)
                 try:
-                    # Розбираємо рядок з квестом на назву та тривалість
-                    quest_info = choice['value'].split(' (')
-                    quest_name = quest_info[0]
-                    duration = quest_info[1].split(')')[0]
-                    price = QWEST[city][quest_name][duration]
-                    if isinstance(price, (int, float)):
+                    match = re.match(r"(.+?\(.*?\))\s*\((.*?)\)$", choice['value'])
+                    if match:
+                        quest_name = match.group(1).strip()
+                        duration = match.group(2).strip()
+                        price = QWEST[city][quest_name][duration]
                         total_price += price
                         price_details.append(f"🎮 Квест '{quest_name}' ({duration}): {price} грн")
                     else:
-                        price_details.append(f"🎮 Квест '{quest_name}' ({duration}): {price}")
+                        logger.error(f"Не вдалося розпарсити квест: {choice['value']}")
+                        price_details.append(f"🎮 Квест '{choice['value']}': Ціна уточнюється")
                 except Exception as e:
                     logger.error(f"Помилка при обробці ціни квесту: {str(e)}")
-                    price_details.append(f"🎮 Квест '{quest_name}': Ціна уточнюється")
+                    price_details.append(f"🎮 Квест '{choice['value']}': Ціна уточнюється")
                     
             elif choice['type'] == 'Пакет':
                 try:
@@ -474,9 +506,6 @@ def calculate_total_price(context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list
         if 'additional_services' in context.user_data:
             for service, option in context.user_data['additional_services'].items():
                 try:
-                    # Логуємо для відлагодження
-                    logger.info(f"Обробка послуги: {service} з опцією: {option}")
-                    
                     # Перевіряємо, чи є ціна в опції
                     if ' - ' in option:
                         # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
@@ -539,6 +568,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     # Очищаємо стан розмови
     context.user_data.clear()
+    for key in ['choices', 'selected_city', 'additional_services', 'selected_service']:
+        if key in context.user_data:
+            del context.user_data[key]
     user_data.clear_conversation_state(user.id)
     
     # Зберігаємо базову інформацію про користувача
@@ -577,6 +609,7 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     # Зберігаємо вибір міста
     add_choice(context, "Місто", city)
     context.user_data['selected_city'] = city  # Зберігаємо місто для подальшого використання
+    logger.info(f"[DEBUG] Поточні вибори після вибору міста: {context.user_data.get('choices')}")
     await save_state(update, context, CHOOSING_EVENT_TYPE)
     
     # Показуємо типи подій
@@ -1380,7 +1413,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Помилка при обробці вибору пакету: {str(e)}")
         await update.message.reply_text(
-            "Вибачте, сталася помилка. Спробуйте ще раз або зв'яжіться з менеджером."
+            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера."
         )
         return ConversationHandler.END
     
@@ -1394,6 +1427,9 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             # Видаляємо останній формат, якщо він є
             remove_choice_by_type(context, 'Формат')
             remove_choice_by_type(context, 'Пакет')
+            remove_choice_by_type(context, 'Квест')  # Додаємо видалення вибору квесту
+            if 'selected_qwest' in context.user_data:
+                del context.user_data['selected_qwest']
             # Повертаємося до вибору формату
             await update.message.reply_text(
                 "Оберіть формат свята:",
@@ -1415,14 +1451,20 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data['selected_city'] = city
         
         # Отримуємо шлях до фото
-        photo_path = QWEST_PHOTOS[text]
+        photo_path = QWEST_PHOTOS.get(text)
         
-        # Відправляємо фото з інформацією про квест
-        with open(photo_path, 'rb') as photo:
-            await update.message.reply_photo(
-                photo=photo,
-                caption=f"🎮 Вибрано квест: {text}\n\n"
-                        f"Оберіть тривалість квесту:",
+        # Надсилаємо фото, якщо воно існує
+        if photo_path and os.path.exists(photo_path):
+            with open(photo_path, 'rb') as photo:
+                await update.message.reply_photo(
+                    photo=photo,
+                    caption=f"🎮 Вибрано квест: {text}\n\n"
+                            f"Оберіть тривалість квесту:",
+                    reply_markup=create_qwest_duration_keyboard(text, city)
+                )
+        else:
+            await update.message.reply_text(
+                f"🎮 Вибрано квест: {text}\n\nОберіть тривалість квесту:",
                 reply_markup=create_qwest_duration_keyboard(text, city)
             )
         return CHOOSING_QWEST_DURATION
@@ -1450,7 +1492,7 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
                            if choice['type'] == "Місто"), None)
             
             if not city:
-                await update.message.reply_text("Будь ласка, почніть спочатку.")
+                await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
                 return ConversationHandler.END
                 
             await update.message.reply_text(
@@ -1614,67 +1656,29 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 return CHOOSING_ADDITIONAL_SERVICES
             # Якщо ми в режимі вибору послуг
             else:
-                logger.info("Повертаємось до фінального меню та очищуємо корзину")
+                logger.info("Повертаємось до вибору формату та очищуємо додаткові послуги")
                 # Очищаємо всі вибрані додаткові послуги
                 if 'additional_services' in context.user_data:
                     logger.info(f"Видаляємо всі додаткові послуги: {context.user_data['additional_services']}")
                     del context.user_data['additional_services']
-                
-                # Знаходимо останній вибір (квест, пакет або погодинна ціна)
-                user_choices = context.user_data.get('choices', [])
-                last_choice = next((choice for choice in reversed(user_choices) 
-                                  if choice['type'] in ['Квест', 'Пакет', 'Погодинна ціна']), None)
-                
-                if last_choice:
-                    if last_choice['type'] == 'Квест':
-                        # Розбираємо рядок з квестом на назву та тривалість
-                        quest_info = last_choice['value'].split(' (')
-                        quest_name = quest_info[0]
-                        duration = quest_info[1].split(')')[0]
-                        
-                        # Отримуємо ціну з конфігурації
-                        price = QWEST[city][quest_name][duration]
-                        
-                        # Відправляємо повідомлення з деталями квесту
-                        await update.message.reply_text(
-                            f"🎮 Вибрано квест: {quest_name}\n"
-                            f"⏱ Тривалість: {duration}\n"
-                            f"💰 Вартість: {price} грн\n\n"
-                            f"Для замовлення цього квесту зв'яжіться з нашим менеджером:"
-                        )
-                    elif last_choice['type'] == 'Пакет':
-                        # Знаходимо тип події для пакету
-                        event_type = next((c['value'] for c in user_choices if c['type'] == "Тип події"), None)
-                        
-                        if event_type:
-                            # Отримуємо ціну пакету
-                            package_name = last_choice['value']
-                            price = PAKET_PRICES[city][event_type][package_name]
-                            
-                            # Відправляємо повідомлення з деталями пакету
-                            await update.message.reply_text(
-                                f"📦 Вибрано пакет: {package_name}\n"
-                                f"💰 Вартість: {price} грн\n\n"
-                                f"Для замовлення цього пакету зв'яжіться з нашим менеджером:"
-                            )
-                    elif last_choice['type'] == 'Погодинна ціна':
-                        # Розбираємо рядок з погодинною ціною
-                        price_info = last_choice['value'].split(' - ')
-                        option_name = price_info[0]
-                        price_value = price_info[1]
-                        
-                        # Відправляємо повідомлення з деталями погодинної оплати
-                        await update.message.reply_text(
-                            f"⏰ Вибрано тариф: {option_name}\n"
-                            f"💰 Вартість: {price_value}\n\n"
-                            f"Для замовлення за погодинним тарифом зв'яжіться з нашим менеджером:"
-                        )
-                
+                # Універсально очищаємо всі вибори після останнього 'Формат'
+                choices = context.user_data.get('choices', [])
+                last_format_idx = None
+                for i in range(len(choices)-1, -1, -1):
+                    if choices[i]['type'] == 'Формат':
+                        last_format_idx = i
+                        break
+                if last_format_idx is not None:
+                    context.user_data['choices'] = choices[:last_format_idx]
+                # Очищаємо всі залежні ключі
+                for k in ['selected_qwest', 'selected_paket', 'selected_hourly']:
+                    if k in context.user_data:
+                        del context.user_data[k]
                 await update.message.reply_text(
-                    "Чи сподобався вам цей варіант?",
-                    reply_markup=create_final_keyboard()
+                    "Оберіть формат свята:",
+                    reply_markup=create_format_keyboard()
                 )
-                return CHOOSING_FINAL
+                return CHOOSING_FORMAT
             
         if text == SHOW_SELECTED_SERVICES_BUTTON:
             logger.info("Показуємо меню видалення послуг")
@@ -1873,24 +1877,15 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         city = context.user_data.get('selected_city')
         
         if district == BACK_BUTTON:
-            # Видаляємо останній вибір району, якщо він є
+            # Видаляємо останній вибір району
             remove_choice_by_type(context, 'Район')
-            
-            # Формуємо повідомлення з вибраними послугами для повернення
-            message = "🎉 Ваші вибрані додаткові послуги:\n\n"
-            if 'additional_services' in context.user_data:
-                for service, option in context.user_data['additional_services'].items():
-                    message += f"• {service}: {option}\n"
-            else:
-                message = "Ви не вибрали жодної додаткової послуги.\n"
-            
-            # Повертаємось до меню додаткових послуг
+            # Повертаємось до вибору додаткових послуг
             await update.message.reply_text(
-                message,
+                "Оберіть додаткові послуги:",
                 reply_markup=create_additional_services_keyboard(city, context)
             )
             return CHOOSING_ADDITIONAL_SERVICES
-        
+            
         # Перевіряємо, чи існує такий район у конфігурації
         if district not in TAXI_PRICES[city]:
             await update.message.reply_text(
@@ -1936,7 +1931,7 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         # Додаємо основну інформацію
         for choice in choices:
-            if choice['type'] in ["Місто", "Тип події", "Локація", "Тематика", "Піддтема"]:
+            if choice['type'] in ["Місто", "Тип події", "Локація", "Тематика", "Підтема", "Формат"]:
                 summary += f"{choice['type']}: {choice['value']}\n"
         
         # Додаємо деталі вартості
@@ -1957,14 +1952,33 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         package_price = PAKET_PRICES[city][event_type][choice['value']]
                         logger.info(f"Знайдено ціну пакету: {package_price}")
                         total_price += package_price
-                        summary += f"⏰ Базова ціна: {package_price} грн\n"
-            elif choice['type'] == "Погодинна ціна":
+                        summary += f"Пакет: {choice['value']} - {package_price} грн\n"
+            elif choice['type'] == "Квест":
+                import re
+                city = next((c['value'] for c in choices if c['type'] == "Місто"), None)
+                try:
+                    match = re.match(r"(.+?\(.*?\))\s*\((.*?)\)$", choice['value'])
+                    if match:
+                        quest_name = match.group(1).strip()
+                        duration = match.group(2).strip()
+                        price = QWEST[city][quest_name][duration]
+                        total_price += price
+                        summary += f"Квест: {quest_name} ({duration}) - {price} грн\n"
+                    else:
+                        logger.error(f"Не вдалося розпарсити квест: {choice['value']}")
+                        summary += f"Квест: {choice['value']}: Ціна уточнюється\n"
+                except Exception as e:
+                    logger.error(f"Помилка при обробці ціни квесту: {str(e)}")
+                    summary += f"Квест: {choice['value']}: Ціна уточнюється\n"
+            elif choice['type'] == 'Погодинна ціна':
                 # Витягуємо ціну з тексту
                 price_text = choice['value']
                 if "грн" in price_text:
                     price = int(price_text.split("грн")[0].strip().split()[-1])
                     total_price += price
-                    summary += f"⏰ {choice['value']}\n"
+                    summary += f"Погодинна оплата: {price_text}\n"
+                else:
+                    summary += f"Погодинна оплата: {price_text}\n"
         
         # Додаємо ціни за додаткові послуги
         if 'additional_services' in context.user_data:
@@ -2050,12 +2064,13 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def save_state(update: Update, context: ContextTypes.DEFAULT_TYPE, state: int) -> None:
     """Зберігає поточний стан розмови"""
     if user_data and update.effective_user:
-        state_data = {
+        # Уніфікований запис стану у вкладеному полі 'state'
+        state_inner = {
             'choices': context.user_data.get('choices', []),
             'last_state': state,
             'last_update': datetime.now().isoformat()
         }
-        user_data.save_conversation_state(update.effective_user.id, state_data)
+        user_data.save_conversation_state(update.effective_user.id, {'state': state_inner})
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Скасування розмови"""
@@ -2114,12 +2129,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"[RESET] Викликано reset для user_id={update.effective_user.id}, state={context.user_data}")
     context.user_data.clear()
+    for key in ['choices', 'selected_city', 'additional_services', 'selected_service']:
+        if key in context.user_data:
+            del context.user_data[key]
     user_data.clear_conversation_state(update.effective_user.id)
     await update.message.reply_text(
         "Стан скинуто. Почніть спочатку через /start.",
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
+
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробляє команду /restart: очищаємо та починаємо з вибору міста"""
+    logger.info(f"[RESTART] Викликано restart для user_id={update.effective_user.id}")
+    context.user_data.clear()
+    for key in ['choices', 'selected_city', 'additional_services', 'selected_service']:
+        if key in context.user_data:
+            del context.user_data[key]
+    user_data.clear_conversation_state(update.effective_user.id)
+    await update.message.reply_text(
+        "Перезапускаємо діалог! Оберіть місто:",
+        reply_markup=create_city_keyboard()
+    )
+    return CHOOSING_CITY
+
+async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Відправка менеджеру файлу з усіма користувачами"""
+    user_id = update.effective_user.id
+    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+        await update.message.reply_text("⛔ Доступ заборонено")
+        return
+    data = []
+    for uid, info in user_data.users.items():
+        row = {'user_id': uid}
+        row.update(info)
+        # Читаємо вкладений стан або верхній рівень для сумісності
+        raw = user_data.get_conversation_state(int(uid)) or {}
+        conv = raw.get('state', raw)
+        # Визначаємо активність за наявністю виборів
+        choices = conv.get('choices', [])
+        row['active'] = bool(choices)
+        # Стадія: номер та назва
+        last_state_num = conv.get('last_state')
+        row['last_state_num'] = last_state_num
+        row['last_state'] = STATE_NAMES.get(last_state_num, 'Unknown')
+        # Час останнього оновлення
+        row['last_update'] = conv.get('last_update') or raw.get('last_updated')
+        # Деталі виборів як колонки
+        for choice in choices:
+            row[choice['type']] = choice['value']
+        # Кількість замовлень
+        row['order_count'] = info.get('order_count', 0)
+        data.append(row)
+    df = pd.DataFrame(data)
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False)
+    buffer.seek(0)
+    await context.bot.send_document(
+        chat_id=MANAGER_CHAT_ID,
+        document=buffer,
+        filename="users.xlsx",
+        caption="📋 Список всіх користувачів"
+    )
 
 def main():
     """Запуск бота"""
@@ -2150,13 +2221,15 @@ def main():
             CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
             CHOOSING_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, summary_chosen)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[CommandHandler('cancel', cancel), CommandHandler('reset', restart_command), CommandHandler('restart', restart_command), CommandHandler('start', start)],
     )
     
     application.add_handler(conv_handler)
     # Додаємо глобальні обробники для /start та /reset
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('reset', reset_command))
+    application.add_handler(CommandHandler('reset', restart_command))
+    application.add_handler(CommandHandler('restart', restart_command))
+    application.add_handler(CommandHandler('users', export_users_command))
     application.run_polling()
 
 if __name__ == '__main__':
