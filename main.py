@@ -508,8 +508,12 @@ def calculate_total_price(context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list
         if 'additional_services' in context.user_data:
             for service, option in context.user_data['additional_services'].items():
                 try:
-                    # Перевіряємо, чи є ціна в опції
-                    if ' - ' in option:
+                    # Підтримка формату: просто число з "грн" (наприклад, "4000 грн")
+                    if isinstance(option, str) and option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
+                        price = int(option.strip().split()[0])
+                        total_price += price
+                        price_details.append(f"➕ {service}: {option}")
+                    elif ' - ' in option:
                         # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
                         price_str = option.split(' - ')[1]
                         if 'грн' in price_str:
@@ -1526,7 +1530,6 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             city = context.user_data.get('selected_city')
             if not city:
                 # Якщо місто не знайдено в context.user_data, пробуємо знайти в choices
-                user_choices = context.user_data.get('choices', [])
                 city = next((choice['value'] for choice in user_choices 
                            if choice['type'] == "Місто"), None)
             
@@ -1962,6 +1965,9 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Показує підсумок вибору користувача"""
     try:
+        # Debug: Log user data for troubleshooting
+        logger.info(f"[SUMMARY] context.user_data at start: {context.user_data}")
+        
         # Отримуємо всі вибори користувача
         choices = context.user_data.get('choices', [])
         
@@ -1975,6 +1981,11 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         # Додаємо деталі вартості
         summary += "\n💰 Деталі вартості:\n"
+        
+        # Додаємо на початку функції (після отримання choices):
+        city = context.user_data.get('selected_city')
+        if not city:
+            city = next((choice['value'] for choice in choices if choice['type'] == "Місто"), None)
         
         # Підраховуємо загальну вартість
         total_price = 0
@@ -2022,8 +2033,12 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if 'additional_services' in context.user_data:
             for service, option in context.user_data['additional_services'].items():
                 try:
-                    # Перевіряємо, чи є ціна в опції
-                    if ' - ' in option:
+                    # Підтримка формату: просто число з "грн" (наприклад, "4000 грн")
+                    if isinstance(option, str) and option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
+                        price = int(option.strip().split()[0])
+                        total_price += price
+                        summary += f"➕ {service}: {option}\n"
+                    elif ' - ' in option:
                         # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
                         price_str = option.split(' - ')[1]
                         if 'грн' in price_str:
@@ -2058,12 +2073,16 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         district = next((choice['value'] for choice in choices if choice['type'] == "Район"), None)
         if district and city:
             try:
-                taxi_price = TAXI_PRICES[city][district]
-                if isinstance(taxi_price, (int, float)):
-                    total_price += taxi_price
-                    summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
+                if city in TAXI_PRICES and district in TAXI_PRICES[city]:
+                    taxi_price = TAXI_PRICES[city][district]
+                    if isinstance(taxi_price, (int, float)):
+                        total_price += taxi_price
+                        summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
+                    else:
+                        summary += f"🚕 Таксі ({district}): {taxi_price}\n"
                 else:
-                    summary += f"🚕 Таксі ({district}): {taxi_price}\n"
+                    logger.warning(f"[SUMMARY] Taxi price not found for city={city}, district={district}")
+                    summary += f"🚕 Таксі ({district}): Ціна уточнюється\n"
             except Exception as e:
                 logger.error(f"Помилка при обробці ціни таксі: {str(e)}")
                 summary += f"🚕 Таксі ({district}): Ціна уточнюється\n"
@@ -2081,7 +2100,7 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         
     except Exception as e:
-        logger.error(f"Помилка при формуванні підсумку: {str(e)}")
+        logger.error(f"Помилка при формуванні підсумку: {str(e)} | context.user_data: {context.user_data}")
         await update.message.reply_text(
             "❌ Вибачте, сталася помилка при формуванні підсумку. Спробуйте ще раз.",
             reply_markup=create_summary_keyboard()
@@ -2156,7 +2175,7 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
         )
         await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
         await update.message.reply_text(
-            "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим чаом з вами зв'яжуться для уточнення.",
+            "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим часом з вами зв'яжуться для уточнення.",
             reply_markup=create_city_keyboard()
         )
         # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
