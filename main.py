@@ -456,6 +456,7 @@ def calculate_total_price(context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list
             if choice['type'] == 'Квест':
                 import re
                 city = next((c['value'] for c in choices if c['type'] == "Місто"), None)
+                
                 try:
                     match = re.match(r"(.+?\(.*?\))\s*\((.*?)\)$", choice['value'])
                     if match:
@@ -577,6 +578,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     old_user = user_data.get_user(user.id)
     old_phone = old_user.get('phone_number') if old_user else None
     old_device_info = old_user.get('device_info') if old_user else None
+    old_visits = old_user.get('visits', 0) if old_user else 0
+    old_order_count = old_user.get('order_count', 0) if old_user else 0
+    visits = old_visits + 1
     user_info = {
         'username': user.username,
         'first_name': user.first_name,
@@ -590,7 +594,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         'type': getattr(update.effective_chat, 'type', None),
         'full_user_obj': user.to_dict() if hasattr(user, 'to_dict') else str(user),
         'device_info': old_device_info,
-        'phone_number': old_phone
+        'phone_number': old_phone,
+        'visits': visits,
+        'order_count': old_order_count
     }
     user_data.add_user(user.id, user_info)
     
@@ -727,11 +733,13 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
         user_choice = update.message.text
         city = next((choice['value'] for choice in context.user_data.get('choices', []) 
                     if choice['type'] == "Місто"), None)
+        event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                          if choice['type'] == "Тип події"), None)
         
-        if not city:
-            logger.error("Місто не знайдено в виборах користувача")
+        if not city or not event_type:
+            logger.error("Місто або тип події не знайдено в виборах користувача")
             await update.message.reply_text(
-                "Спочатку оберіть місто:",
+                "Спочатку оберіть місто та тип події:",
                 reply_markup=create_city_keyboard()
             )
             return CHOOSING_CITY
@@ -815,8 +823,8 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         city = next((choice['value'] for choice in user_choices 
                     if choice['type'] == "Місто"), None)
         
-        if not event_type or not city:
-            logger.error(f"Тип події або місто не знайдено в виборах користувача. Тип події: {event_type}, Місто: {city}")
+        if not city or not event_type:
+            logger.error(f"Місто або тип події не знайдено в виборах користувача. Тип події: {event_type}, Місто: {city}")
             await update.message.reply_text(
                 "Спочатку оберіть місто та тип події:",
                 reply_markup=create_city_keyboard()
@@ -1965,7 +1973,6 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     logger.info(f"PAKET_PRICES для міста {city} та типу події {event_type}: {PAKET_PRICES[city][event_type]}")
                     if choice['value'] in PAKET_PRICES[city][event_type]:
                         package_price = PAKET_PRICES[city][event_type][choice['value']]
-                        logger.info(f"Знайдено ціну пакету: {package_price}")
                         total_price += package_price
                         summary += f"Пакет: {choice['value']} - {package_price} грн\n"
             elif choice['type'] == "Квест":
@@ -2169,7 +2176,7 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return CHOOSING_CITY
 
 async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Відправка менеджеру файлу з усіма користувачами"""
+    """Відправка менеджеру файлу з усіма користувачами у правильному форматі"""
     user_id = update.effective_user.id
     if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
         await update.message.reply_text("⛔ Доступ заборонено")
@@ -2180,27 +2187,41 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
             numeric_uid = int(uid)
         except (ValueError, TypeError):
             continue
-        row = {'user_id': uid}
-        row.update(info)
-        # Читаємо вкладений стан або верхній рівень для сумісності
+        row = {
+            'chat_id': info.get('chat_id', ''),
+            'username': info.get('username', ''),
+            'first_name': info.get('first_name', ''),
+            'last_name': info.get('last_name', ''),
+            'language_code': info.get('language_code', ''),
+            'phone_number': info.get('phone_number', ''),
+            'is_bot': info.get('is_bot', ''),
+            'privacy': info.get('type', ''),
+            'city': '',  # Заповниться нижче
+            'order_count': info.get('order_count', 0),
+            'last_interaction': info.get('last_interaction', ''),
+            'status': '',  # Заповниться нижче
+            'last_update': '',  # Заповниться нижче
+            'created_at': info.get('created_at', '')
+        }
+        # Дістаємо стан розмови
         raw = user_data.get_conversation_state(numeric_uid) or {}
         conv = raw.get('state', raw)
-        # Визначаємо активність за наявністю виборів
         choices = conv.get('choices', [])
-        row['active'] = bool(choices)
-        # Стадія: номер та назва
-        last_state_num = conv.get('last_state')
-        row['last_state_num'] = last_state_num
-        row['last_state'] = STATE_NAMES.get(last_state_num, 'Unknown')
-        # Час останнього оновлення
-        row['last_update'] = conv.get('last_update') or raw.get('last_updated')
-        # Деталі виборів як колонки
+        # Місто
         for choice in choices:
-            row[choice['type']] = choice['value']
-        # Кількість замовлень
-        row['order_count'] = info.get('order_count', 0)
+            if choice.get('type') == 'Місто':
+                row['city'] = choice.get('value', '')
+        # Статус
+        row['status'] = 'active' if choices else 'inactive'
+        # Час останнього оновлення
+        row['last_update'] = conv.get('last_update') or raw.get('last_updated') or info.get('last_interaction', '')
         data.append(row)
-    df = pd.DataFrame(data)
+    # Формуємо DataFrame з потрібним порядком колонок
+    columns = [
+        'chat_id', 'username', 'first_name', 'last_name', 'language_code', 'phone_number',
+        'is_bot', 'privacy', 'city', 'order_count', 'last_interaction', 'status', 'last_update', 'created_at'
+    ]
+    df = pd.DataFrame(data, columns=columns)
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
