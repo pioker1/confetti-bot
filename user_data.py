@@ -147,9 +147,12 @@ class UserData:
         """Зберігає стан розмови користувача"""
         if self.conversations is not None and self.ensure_connected():
             try:
-                state['updated_at'] = datetime.now()
+                # Встановлюємо правильний user_id (int) для збереження
+                state['user_id'] = int(user_id)
+                # Оновлюємо last_update для експорту
+                state['last_update'] = datetime.now().isoformat()
                 self.conversations.update_one(
-                    {'user_id': user_id},
+                    {'user_id': int(user_id)},
                     {'$set': state},
                     upsert=True
                 )
@@ -163,7 +166,8 @@ class UserData:
         """Отримує стан розмови користувача"""
         if self.conversations is not None and self.ensure_connected():
             try:
-                state = self.conversations.find_one({'user_id': user_id})
+                # user_id має бути int
+                state = self.conversations.find_one({'user_id': int(user_id)})
                 if state:
                     state.pop('_id', None)
                 return state
