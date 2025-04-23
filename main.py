@@ -2134,13 +2134,15 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return CHOOSING_DISTRICT
             
         elif text == "📅 Дізнатись час/дату":
-            contact_keyboard = ReplyKeyboardMarkup([
-                [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
-                [KeyboardButton('⬅️ На початок')]
-                ], resize_keyboard=True)
+            # 1. Надіслати підсумок менеджеру
+            await send_summary_to_manager(update, context)
+            # 2. Показати користувачу повідомлення про успішне надсилання
             await update.message.reply_text(
-                "Будь ласка, натисніть кнопку нижче, щоб надіслати свій номер телефону менеджеру.",
-                reply_markup=contact_keyboard
+                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
+                    [KeyboardButton('⬅️ На початок')]
+                ], resize_keyboard=True)
             )
             return PHONE_CONTACT
             
@@ -2380,6 +2382,8 @@ async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Формує і надсилає менеджеру всі деталі користувача та замовлення"""
     user = update.effective_user
+    logger.info(f"[SEND_SUMMARY] Виклик send_summary_to_manager для user_id={user.id}")
+    logger.info(f"[SEND_SUMMARY] context.user_data: {context.user_data}")
     choices = context.user_data.get('choices', [])
     additional_services = context.user_data.get('additional_services', {})
     summary_lines = [
@@ -2397,8 +2401,11 @@ async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_
         for service, option in additional_services.items():
             summary_lines.append(f"➕ {service}: {option}")
     summary = '\n'.join(summary_lines)
+    logger.info(f"[SEND_SUMMARY] summary to send: {summary}")
+    logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID: {MANAGER_CHAT_ID}")
     try:
         await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=summary, parse_mode='HTML')
+        logger.info("[SEND_SUMMARY] Повідомлення менеджеру успішно надіслано!")
     except Exception as e:
         logger.error(f"Не вдалося надіслати підсумок менеджеру: {e}")
 
