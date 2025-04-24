@@ -760,6 +760,7 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
             return CHOOSING_CITY
 
         if user_choice == BACK_BUTTON:
+            remove_choice_by_type(context, 'Тип події')
             await update.message.reply_text(
                 "Оберіть яку подію будете святкувати:",
                 reply_markup=create_event_type_keyboard()
