@@ -652,7 +652,7 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     # Показуємо типи подій
     await update.message.reply_text(
-        "Оберіть тип події:",
+        "Оберіть яку подію будете святкувати:",
         reply_markup=create_event_type_keyboard()
     )
     
@@ -734,7 +734,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # Зберігаємо вибір типу події тільки для основних подій
             add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
-                "Оберіть локацію для події:",
+                "Оберіть місце де хотіли б святкувати:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -768,7 +768,7 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
 
         if user_choice == BACK_BUTTON:
             await update.message.reply_text(
-                "Оберіть тип події:",
+                "Оберіть яку подію будете святкувати:",
                 reply_markup=create_event_type_keyboard()
             )
             return CHOOSING_EVENT_TYPE
@@ -789,7 +789,7 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
         
         # elif user_choice == "🎂 День народження":
         #     await update.message.reply_text(
-        #         "Оберіть локацію для події:",
+        #         "Оберіть місце де хотіли б святкувати:",
         #         reply_markup=create_location_keyboard(user_choice)
         #     )
         #     return CHOOSING_LOCATION
@@ -851,14 +851,14 @@ async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DE
     
     # elif text == "🎂 День народження":
     #     await update.message.reply_text(
-    #         "Оберіть локацію для події:",
+    #         "Оберіть місце де хотіли б святкувати:",
     #         reply_markup=create_location_keyboard(text)
     #     )
     #     return CHOOSING_LOCATION
     
     # elif text == "🎓 Випускний":
     #     await update.message.reply_text(
-    #         "Оберіть локацію для події:",
+    #         "Оберіть місце де хотіли б святкувати:",
     #         reply_markup=create_location_keyboard(text)
     #     )
     #     return CHOOSING_LOCATION
@@ -972,7 +972,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             remove_choice_by_type(context, 'Локація')
             remove_choice_by_type(context, 'Тип події')
             await update.message.reply_text(
-                "Оберіть тип події:",
+                "Оберіть яку подію будете святкувати:",
                 reply_markup=create_event_type_keyboard()
             )
             return CHOOSING_EVENT_TYPE
@@ -985,7 +985,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [KeyboardButton(BACK_BUTTON)]
             ]
             await update.message.reply_text(
-                "Оберіть опцію:",
+                "Чим саме я можу вам допомогти?",
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
             return CHOOSING_LOCATION_inshe
@@ -1041,7 +1041,7 @@ async def location_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TY
 
         if user_choice == BACK_BUTTON:
             await update.message.reply_text(
-                "Оберіть локацію:",
+                "Оберіть місце де хотіли б святкувати:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -1122,12 +1122,12 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                                 if choice['type'] == "Локація"), None)
             if last_location:
                 await update.message.reply_text(
-                    "Оберіть локацію:",
+                    "Оберіть місце де хотіли б святкувати:",
                     reply_markup=create_location_keyboard(event_type)
                 )
             else:
                 await update.message.reply_text(
-                    "Оберіть локацію:",
+                    "Оберіть місце де хотіли б святкувати:",
                     reply_markup=create_location_keyboard(event_type)
                 )
             # Видаляємо значення локації
@@ -1366,8 +1366,8 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             
             # Показуємо погодинні ціни
             await update.message.reply_text(
-                f"💰 Погодинні ціни для {event_type} у місті {city}" + 
-                (" (заміський комплекс)" if is_tourbase else "") + ":",
+                f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
+                ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else "") + ":",
                 reply_markup=create_hourly_price_keyboard(city, price_key)
             )
             return CHOOSING_HOURLY_PRICE
@@ -2354,13 +2354,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Відновлюємо відповідний стан на основі останнього вибору
     if last_choice['type'] == "Місто":
         await update.message.reply_text(
-            "Оберіть тип події:",
+            "Оберіть яку подію будете святкувати:",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
     elif last_choice['type'] == "Тип події":
         await update.message.reply_text(
-            "Оберіть локацію:",
+            "Оберіть місце де хотіли б святкувати:",
             reply_markup=create_location_keyboard(last_choice['value'])
         )
         return CHOOSING_LOCATION
