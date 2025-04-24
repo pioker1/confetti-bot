@@ -695,15 +695,8 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
         elif '🎯 Інше' in event_type:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) 
-                        if choice['type'] == "Місто"), None)
-            
-            if not city:
-                await update.message.reply_text(
-                    "Спочатку оберіть місто:",
-                    reply_markup=create_city_keyboard()
-                )
-                return CHOOSING_CITY
-                
+                if choice['type'] == "Місто"), None)
+            add_choice(context, "Тип події", event_type)  # Додаємо цей рядок!
             await update.message.reply_text(
                 GENERAL_INFO[city],
                 reply_markup=create_other_keyboard()
@@ -774,6 +767,13 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
             return CHOOSING_EVENT_TYPE
 
         elif user_choice == CONTACT_MANAGER_BUTTON:
+            # Перевіряємо наявність міста перед відправкою контактів менеджера
+            if not city or city not in MANAGER_INFO or city not in MANAGER_CONTACT_MESSAGES:
+                await update.message.reply_text(
+                    "Спочатку оберіть місто та тип події:",
+                    reply_markup=create_city_keyboard()
+                )
+                return CHOOSING_CITY
             # Відправляємо контакти менеджера
             manager = MANAGER_INFO[city]
             message = MANAGER_CONTACT_MESSAGES[city].format(
@@ -1047,6 +1047,13 @@ async def location_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TY
             return CHOOSING_LOCATION
 
         elif user_choice == CONTACT_MANAGER_BUTTON:
+            # Перевіряємо наявність міста перед відправкою контактів менеджера
+            if not city or city not in MANAGER_INFO or city not in MANAGER_CONTACT_MESSAGES:
+                await update.message.reply_text(
+                    "Спочатку оберіть місто та тип події:",
+                    reply_markup=create_city_keyboard()
+                )
+                return CHOOSING_CITY
             # Відправляємо контакти менеджера
             manager = MANAGER_INFO[city]
             message = MANAGER_CONTACT_MESSAGES[city].format(
@@ -1406,7 +1413,6 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return CHOOSING_QWEST
         
     return CHOOSING_FORMAT
-
 
 async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробляє вибір погодинної ціни"""
