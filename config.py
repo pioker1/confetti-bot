@@ -428,7 +428,7 @@ THEME_PHOTOS = {
             'Морська': 'матеріали/images/КИЇВ/вечірка/Морська.jpg',
             'Sweet Party': 'матеріали/images/КИЇВ/вечірка/Sweet Party.jpg',
             'K-Pop': 'матеріали/images/КИЇВ/вечірка/K-Pop.jpg',
-            'Tik-tok party': 'матеріали/images/КИЇВ/вечірка/Tik-tok party.png',
+            'Tik-tok party': 'матеріали/images/КИЇВ/вечірка/Tik-tok party.PNG',
             'Safari party': 'матеріали/images/КИЇВ/вечірка/Safari party.jpg',
             'Секретна лабораторія': 'матеріали/images/КИЇВ/вечірка/Секретна лабораторія.jpg',
             'Перший мільйон': 'матеріали/images/КИЇВ/вечірка/Перший мільйон.jpg',
