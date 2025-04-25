@@ -348,11 +348,12 @@ def create_qwest_duration_keyboard(qwest_name: str, city: str) -> ReplyKeyboardM
     """Створює клавіатуру для вибору тривалості квесту"""
     try:
         keyboard = []
-        durations = QWEST[city][qwest_name].keys()
-        
-        for duration in durations:
-            price = QWEST[city][qwest_name][duration]
-            keyboard.append([KeyboardButton(f"{duration} - {price} грн")])
+        durations = QWEST[city][qwest_name]
+        if isinstance(durations, dict):
+            for duration, price in durations.items():
+                keyboard.append([KeyboardButton(f"{duration} - {price} грн")])
+        else:
+            logger.error(f"QWEST[city][qwest_name] is not a dict: {durations}")
             
         keyboard.append([KeyboardButton(BACK_BUTTON)])
         return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -735,6 +736,15 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
             return CHOOSING_LOCATION
         
+        # --- ДОДАНО ЗАХИСТ ---
+        if event_type not in EVENT_TYPES_LIST:
+            await update.message.reply_text(
+                "Будь ласка, оберіть тип події з клавіатури!",
+                reply_markup=create_event_type_keyboard()
+            )
+            return CHOOSING_EVENT_TYPE
+        # --- КІНЕЦЬ ЗАХИСТУ ---
+        
         return ConversationHandler.END
 
     except Exception as e:
@@ -881,10 +891,12 @@ async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # Збираємо деталі замовлення
             # Запам'ятати місто, тип події, послугу якщо ще не збережено
             if 'city' not in context.user_data:
-                city = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Місто"), 'Невідомо')
+                city = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                    if choice['type'] == "Місто"), 'Невідомо')
                 context.user_data['city'] = city
             if 'event_type' not in context.user_data:
-                event_type = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Тип події"), 'Невідомо')
+                event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                    if choice['type'] == "Тип події"), 'Невідомо')
                 context.user_data['event_type'] = event_type
             if 'service' not in context.user_data:
                 context.user_data['service'] = text
@@ -1401,6 +1413,16 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
             return CHOOSING_THEME2
     
+    # --- ДОДАНО ЗАХИСТ ---
+    allowed_formats = ["⏰ Погодинно", "📦 Пакетні пропозиції", "🎯 Квести"]
+    if text not in allowed_formats and text != BACK_BUTTON:
+        await update.message.reply_text(
+            "Будь ласка, оберіть формат з клавіатури!",
+            reply_markup=create_format_keyboard()
+        )
+        return CHOOSING_FORMAT
+    # --- КІНЕЦЬ ЗАХИСТУ ---
+    
     # Зберігаємо вибраний формат
     add_choice(context, "Формат", text)
     
@@ -1587,6 +1609,16 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return CHOOSING_CITY
         
+        # --- ДОДАНО ЗАХИСТ ---
+        allowed_packages = list(PAKET_PRICES.get(city, {}).get(event_type, {}).keys())
+        if text not in allowed_packages:
+            await update.message.reply_text(
+                "Будь ласка, оберіть пакет з клавіатури!",
+                reply_markup=create_package_keyboard(city, event_type)
+            )
+            return CHOOSING_PACKAGE
+        # --- КІНЕЦЬ ЗАХИСТУ ---
+        
         # Зберігаємо вибраний пакет
         add_choice(context, "Пакет", text)
         
@@ -1603,14 +1635,16 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_photo(
                     photo=photo,
                     caption=f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
-                            f"Для замовлення цього пакету зв'яжіться з нашим менеджером:"
+                            f"Для замовлення цього пакету зв'яжіться з нашим менеджером:",
+                    reply_markup=create_final_keyboard()
                 )
         else:
             # Якщо файл не знайдено, відправляємо повідомлення без фото
             logger.warning(f"Файл не знайдено: {photo_path}")
             await update.message.reply_text(
                 f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
-                f"Для замовлення цього пакету зв'яжіться з нашим менеджером:"
+                f"Для замовлення цього пакету зв'яжіться з нашим менеджером:",
+                reply_markup=create_final_keyboard()
             )
             
         # Показуємо фінальне меню
@@ -1656,6 +1690,16 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
             return ConversationHandler.END
             
+        # --- ДОДАНО ЗАХИСТ ---
+        allowed_qwests = list(QWEST.get(context.user_data.get('selected_city'), {}).keys())
+        if text not in allowed_qwests and text != BACK_BUTTON:
+            await update.message.reply_text(
+                "Будь ласка, оберіть квест з клавіатури!",
+                reply_markup=create_qwest_keyboard(context.user_data.get('selected_city'))
+            )
+            return CHOOSING_QWEST
+        # --- КІНЕЦЬ ЗАХИСТУ ---
+        
         # Зберігаємо вибраний квест та місто
         context.user_data['selected_qwest'] = text
         context.user_data['selected_city'] = city
@@ -1705,6 +1749,22 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text("Будь ласка, почніть спочатку.")
             return ConversationHandler.END
             
+        # --- ДОДАНО ЗАХИСТ ---
+        allowed_durations = []
+        if city and qwest_name:
+            durations = QWEST.get(city, {}).get(qwest_name, {})
+            if isinstance(durations, dict):
+                allowed_durations = [f"{d} - {p} грн" for d, p in durations.items()]
+            else:
+                logger.error(f"QWEST[city][qwest_name] is not a dict: {durations}")
+        if text not in allowed_durations and text != BACK_BUTTON:
+            await update.message.reply_text(
+                "Будь ласка, оберіть тривалість з клавіатури!",
+                reply_markup=create_qwest_duration_keyboard(qwest_name, city)
+            )
+            return CHOOSING_QWEST_DURATION
+        # --- КІНЕЦЬ ЗАХИСТУ ---
+        
         # Розбираємо текст для отримання тривалості та ціни
         duration, price = text.split(" - ")
         price = int(price.split()[0])  # Видаляємо "грн" і конвертуємо в число
@@ -2033,14 +2093,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         for key in ADDITIONAL_SERVICES_PHOTOS[city_key]:
                             if key.upper() in service.upper() or service.upper() in key.upper():
                                 service_type = key
-                                break
-                        if not service_type:
-                            normalized_service = service.replace('-', '').replace(' ', '').upper()
-                            for key in ADDITIONAL_SERVICES_PHOTOS[city_key]:
-                                if key.replace('-', '').replace(' ', '').upper() in normalized_service or normalized_service in key.replace('-', '').replace(' ', '').upper():
-                                    service_type = key
-                                    break
-                        # Додатковий хак для "ГЕНЕРАТОРА"
+                                break                        # Додатковий хак для "ГЕНЕРАТОРА"
                         if not service_type:
                             if "ГЕНЕРАТОР" in service.upper() or "БУЛЬБАШОК" in service.upper():
                                 service_type = "ГЕНЕРАТОР"
