@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, QWEST_PHOTOS, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -1660,23 +1660,10 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data['selected_qwest'] = text
         context.user_data['selected_city'] = city
         
-        # Отримуємо шлях до фото
-        photo_path = QWEST_PHOTOS.get(text)
-        
-        # Надсилаємо фото, якщо воно існує
-        if photo_path and os.path.exists(photo_path):
-            with open(photo_path, 'rb') as photo:
-                await update.message.reply_photo(
-                    photo=photo,
-                    caption=f"🎮 Вибрано квест: {text}\n\n"
-                            f"Оберіть тривалість квесту:",
-                    reply_markup=create_qwest_duration_keyboard(text, city)
-                )
-        else:
-            await update.message.reply_text(
-                f"🎮 Вибрано квест: {text}\n\nОберіть тривалість квесту:",
-                reply_markup=create_qwest_duration_keyboard(text, city)
-            )
+        await update.message.reply_text(
+            f"🎮 Вибрано квест: {text}\n\nОберіть тривалість квесту:",
+            reply_markup=create_qwest_duration_keyboard(text, city)
+        )
         return CHOOSING_QWEST_DURATION
         
     except Exception as e:
