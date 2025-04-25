@@ -1091,7 +1091,7 @@ async def location_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TY
                 with open(pdf_path, 'rb') as file:
                     await update.message.reply_document(
                         document=file,
-                        caption=f"📍 Підказки щодо місць проведення у місті {city}",
+                        caption=f"Ось місця для проведення свята у місті {city} 👆🏻",
                         reply_markup=create_location_keyboard(event_type)
                     )
             else:
