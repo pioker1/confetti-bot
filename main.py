@@ -135,13 +135,15 @@ def initialize_user_choices(context: ContextTypes.DEFAULT_TYPE) -> None:
         raise
 
 def add_choice(context: ContextTypes.DEFAULT_TYPE, choice_type: str, value: str) -> None:
-    """Додає вибір користувача до історії"""
+    """Додає вибір користувача до історії, видаляючи попередній такого ж типу для 'Формат', 'Погодинна ціна', 'Пакет'."""
     try:
         initialize_user_choices(context)
         if not isinstance(choice_type, str) or not isinstance(value, str):
             logger.error(f"Невірний тип даних для вибору: type={type(choice_type)}, value={type(value)}")
             raise ValueError("Тип та значення вибору повинні бути рядками")
-            
+        # Видаляємо попередній вибір того ж типу для унікальних категорій
+        if choice_type in ["Формат", "Погодинна ціна", "Пакет"]:
+            remove_choice_by_type(context, choice_type)
         context.user_data['choices'].append({'type': choice_type, 'value': value})
         logger.info(f"Додано вибір: {choice_type} = {value}")
     except Exception as e:
@@ -178,13 +180,14 @@ def create_theme_keyboard() -> ReplyKeyboardMarkup:
     keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def create_theme2_keyboard(theme: str) -> ReplyKeyboardMarkup:
-    """Створює клавіатуру з підтемами для вибраної тематики"""
+def create_theme2_keyboard(theme: str, city: str) -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з підтемами для вибраної тематики та міста"""
     try:
-        # Отримуємо список підтем для вибраної тематики
-        subthemes = THEME_BTN.get(theme, [])
+        # Отримуємо список підтем для вибраної тематики та міста
+        from config import THEME_BTN
+        subthemes = THEME_BTN.get(city, {}).get(theme, [])
         if not subthemes:
-            logger.warning(f"Не знайдено підтем для тематики: {theme}")
+            logger.warning(f"Не знайдено підтем для тематики: {theme} у місті: {city}")
             return create_theme_keyboard()
 
         # Створюємо клавіатуру
@@ -814,6 +817,7 @@ async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DE
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
+
     # Підтримка всіх послуг із FAMALY_TRIP
     famaly_services = [f"{service} - {price} грн" for city_services in FAMALY_TRIP.values() for service, price in city_services.items()]
     if text in famaly_services:
@@ -1164,14 +1168,15 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             )
             return CHOOSING_THEME
 
-        # Зберігаємо вибір тематики
+        # Зберігаємо вибір тематики (замість додавання ще однієї, видаляємо попередню)
+        remove_choice_by_type(context, "Тематика")
         add_choice(context, "Тематика", theme)
         
         # Відправляємо інформацію про тематику та показуємо підтеми
         theme_info = THEME_INFO.get(theme, "")
         await update.message.reply_text(
             f"Ви обрали тематику: {theme}\n\n{theme_info}\n\nОберіть конкретну тематику:",
-            reply_markup=create_theme2_keyboard(theme)
+            reply_markup=create_theme2_keyboard(theme, city)
         )
         return CHOOSING_THEME2
 
@@ -1213,27 +1218,48 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return CHOOSING_THEME
 
         # Перевіряємо чи вибрана підтема доступна для даної тематики
-        available_subthemes = THEME_BTN.get(theme, [])
+        city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+        if not city:
+            logger.error("Не вдалося визначити місто для вибору підтеми")
+            await update.message.reply_text(
+                "Помилка: не знайдено місто. Почніть з початку.",
+                reply_markup=create_city_keyboard()
+            )
+            return CHOOSING_CITY
+        
+        available_subthemes = THEME_BTN.get(city, {}).get(theme, [])
         if subtheme not in available_subthemes:
             await update.message.reply_text(
                 "Будь ласка, оберіть тематику зі списку:",
-                reply_markup=create_theme2_keyboard(theme)
+                reply_markup=create_theme2_keyboard(theme, city)
             )
             return CHOOSING_THEME2
 
         # Зберігаємо вибір підтеми
         add_choice(context, "Підтема", subtheme)
         
-        # Отримуємо посилання на фото для підтеми
-        photo_url = THEME_PHOTOS.get(theme, {}).get(subtheme)
+        # --- Додаємо отримання міста для фото підтеми ---
+        city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+        # Отримуємо посилання на фото для підтеми з урахуванням міста
+        photo_url = None
+        if city:
+            photo_url = THEME_PHOTOS.get(city, {}).get(theme, {}).get(subtheme)
         
         # Відправляємо фото з описом
         if photo_url:
-            await update.message.reply_photo(
-                photo=photo_url,
-                caption=f"🎨 {subtheme}\n\nОберіть опцію:",
-                reply_markup=create_theme_details_keyboard()
-            )
+            if os.path.exists(photo_url):
+                with open(photo_url, 'rb') as photo:
+                    await update.message.reply_photo(
+                        photo=photo,
+                        caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                        reply_markup=create_theme_details_keyboard()
+                    )
+            else:
+                await update.message.reply_photo(
+                    photo=photo_url,
+                    caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                    reply_markup=create_theme_details_keyboard()
+                )
         else:
             await update.message.reply_text(
                 f"🎨 {subtheme}\n\nОберіть опцію:",
@@ -1282,12 +1308,20 @@ async def theme_details_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
             theme = next((choice['value'] for choice in reversed(user_choices) 
                          if choice['type'] == "Тематика"), None)
             
+            city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+            if not city:
+                logger.error("Не вдалося визначити місто у theme_details_chosen")
+                await update.message.reply_text(
+                    "Помилка: не знайдено місто. Почніть з початку.",
+                    reply_markup=create_city_keyboard()
+                )
+                return CHOOSING_CITY
             await update.message.reply_text(
                 "Оберіть конкретну тематику:",
-                reply_markup=create_theme2_keyboard(theme)
+                reply_markup=create_theme2_keyboard(theme, city)
             )
             return CHOOSING_THEME2
-
+        
         if choice == "💰 Ціни":
             # Відправляємо повідомлення про недоступність цін
             await update.message.reply_text(
@@ -1333,16 +1367,26 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                         if choice['type'] == "Підтема"), None)
         
         if subtheme:
-            # Отримуємо посилання на фото для підтеми
-            photo_url = THEME_PHOTOS.get(theme, {}).get(subtheme)
-            
+            # --- Додаємо отримання міста для фото підтеми (BACK_BUTTON) ---
+            city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+            photo_url = None
+            if city:
+                photo_url = THEME_PHOTOS.get(city, {}).get(theme, {}).get(subtheme)
             # Відправляємо фото з описом
             if photo_url:
-                await update.message.reply_photo(
-                    photo=photo_url,
-                    caption=f"🎨 {subtheme}\n\nОберіть опцію:",
-                    reply_markup=create_theme_details_keyboard()
-                )
+                if os.path.exists(photo_url):
+                    with open(photo_url, 'rb') as photo:
+                        await update.message.reply_photo(
+                            photo=photo,
+                            caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                            reply_markup=create_theme_details_keyboard()
+                        )
+                else:
+                    await update.message.reply_photo(
+                        photo=photo_url,
+                        caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                        reply_markup=create_theme_details_keyboard()
+                    )
             else:
                 await update.message.reply_text(
                     f"🎨 {subtheme}\n\nОберіть опцію:",
@@ -1353,7 +1397,7 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             # Якщо підтеми немає, повертаємося до вибору підтеми
             await update.message.reply_text(
                 "Оберіть конкретну тематику:",
-                reply_markup=create_theme2_keyboard(theme)
+                reply_markup=create_theme2_keyboard(theme, city)
             )
             return CHOOSING_THEME2
     
@@ -1518,7 +1562,6 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Видаляємо останній формат, якщо він є
         remove_choice_by_type(context, 'Формат')
         remove_choice_by_type(context, 'Пакет')
-        # Повертаємося до вибору формату
         await update.message.reply_text(
             "Оберіть формат свята:",
             reply_markup=create_format_keyboard()
@@ -1824,9 +1867,9 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
             else:
                 logger.info("Повертаємось до вибору формату та очищуємо додаткові послуги")
                 # Очищаємо всі вибрані додаткові послуги
-                if 'additional_services' in context.user_data:
-                    logger.info(f"Видаляємо всі додаткові послуги: {context.user_data['additional_services']}")
-                    del context.user_data['additional_services']
+            if 'additional_services' in context.user_data:
+                logger.info(f"Видаляємо всі додаткові послуги: {context.user_data['additional_services']}")
+                del context.user_data['additional_services']
                 # Універсально очищаємо всі вибори після останнього 'Формат'
                 choices = context.user_data.get('choices', [])
                 last_format_idx = None
@@ -1840,12 +1883,13 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 for k in ['selected_qwest', 'selected_paket', 'selected_hourly']:
                     if k in context.user_data:
                         del context.user_data[k]
-                await update.message.reply_text(
-                    "Оберіть формат свята:",
-                    reply_markup=create_format_keyboard()
-                )
-                return CHOOSING_FORMAT
+            await update.message.reply_text(
+                "Оберіть формат свята:",
+                reply_markup=create_format_keyboard()
+            )
+            return CHOOSING_FORMAT
             
+        # Якщо натиснуто "Показати вибрані послуги"
         if text == SHOW_SELECTED_SERVICES_BUTTON:
             logger.info("Показуємо меню видалення послуг")
             context.user_data['removing_services'] = True
@@ -1881,9 +1925,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 return CHOOSING_ADDITIONAL_SERVICES
             
         if text == NEXT_BUTTON:
-            logger.info("Натиснуто кнопку ДАЛІ")
+            logger.info("[ADDITIONAL_SERVICES] Натиснуто 'Далі'.")
+            # Перевіряємо наявність вибраних послуг
             if 'additional_services' not in context.user_data:
-                logger.warning("Додаткові послуги не вибрані")
+                logger.warning("[ADDITIONAL_SERVICES] Вибрані послуги відсутні.")
                 message = "❗️ Ви не вибрали жодної додаткової послуги.\n\n"
             else:
                 # Формуємо повідомлення з вибраними послугами
@@ -1900,26 +1945,26 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
             )
             return CHOOSING_DISTRICT
             
-        # Перевіряємо, чи це послуга з підменю
+        # Якщо вибрано послугу з підменю
         if city in ADDITIONAL_SERVICES_WITH_SUBMENU and text in ADDITIONAL_SERVICES_WITH_SUBMENU[city]:
-            logger.info(f"Вибрано послугу з підменю: {text}")
+            logger.info(f"[ADDITIONAL_SERVICES] Вибрано послугу з підменю: {text}")
             await update.message.reply_text(
                 f"Виберіть опцію для послуги '{text}':",
                 reply_markup=create_service_options_keyboard(city, text)
             )
             context.user_data['selected_service'] = text
-            logger.info(f"Збережено вибрану послугу: {text}")
+            logger.info(f"[ADDITIONAL_SERVICES] Збережено вибрану послугу: {text}")
             return CHOOSING_SERVICE_OPTION
             
-        # Перевіряємо, чи це одиночна послуга
+        # Якщо вибрано просту послугу
         if city in ADDITIONAL_SERVICES_SINGLE:
             # Отримуємо назву послуги без ціни
             service_name = text.split(" - ")[0].strip() if " - " in text else text
-            logger.info(f"Перевіряємо одиночну послугу: {service_name}")
+            logger.info(f"[ADDITIONAL_SERVICES] Перевіряємо просту послугу: {service_name}")
             
-            # Перевіряємо чи є така послуга в списку одиночних послуг
+            # Перевіряємо чи є така послуга в списку простих послуг
             if service_name in ADDITIONAL_SERVICES_SINGLE[city]:
-                logger.info(f"Знайдено одиночну послугу: {service_name}")
+                logger.info(f"[ADDITIONAL_SERVICES] Знайдено просту послугу: {service_name}")
                 price = ADDITIONAL_SERVICES_SINGLE[city][service_name]
                 if isinstance(price, str):
                     price_text = price
@@ -1930,97 +1975,126 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     context.user_data['additional_services'] = {}
                 # Зберігаємо тільки ціну як значення
                 context.user_data['additional_services'][service_name] = price_text
-                logger.info(f"Додано одиночну послугу: {service_name} = {price_text}")
+                logger.info(f"[ADDITIONAL_SERVICES] Додано просту послугу: {service_name} = {price_text}")
                 
                 # Перевіряємо, чи є фото для генератора мильних бульбашок
                 if service_name == '🫧 Генератор мильних бульбашок':
-                    photo_path = ADDITIONAL_SERVICES_PHOTOS['ГЕНЕРАТОР'][service_name]
-                    logger.info(f"Шлях до фото генератора: {photo_path}")
-                    if os.path.exists(photo_path):
-                        logger.info(f"Файл {photo_path} існує")
-                        await update.message.reply_photo(
-                            photo=open(photo_path, 'rb'),
-                            caption=f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
-                            reply_markup=create_additional_services_keyboard(city, context)
-                        )
+                    # Знаходимо ключ міста
+                    city_key = None
+                    normalized_city = city.replace('-', '').replace(' ', '').upper()
+                    for ck in ADDITIONAL_SERVICES_PHOTOS.keys():
+                        if ck.replace('-', '').replace(' ', '').upper() == normalized_city:
+                            city_key = ck
+                            break
+                    if city_key and "ГЕНЕРАТОР" in ADDITIONAL_SERVICES_PHOTOS[city_key]:
+                        photo_path = ADDITIONAL_SERVICES_PHOTOS[city_key]["ГЕНЕРАТОР"].get(service_name)
+                        logger.info(f"[ADDITIONAL_SERVICES] Шлях до фото генератора: {photo_path}")
+                        if photo_path and os.path.exists(photo_path):
+                            logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
+                            await update.message.reply_photo(
+                                photo=open(photo_path, 'rb'),
+                                caption=f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                                reply_markup=create_additional_services_keyboard(city, context)
+                            )
+                        else:
+                            logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує або не знайдено")
+                            await update.message.reply_text(
+                                f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                                reply_markup=create_additional_services_keyboard(city, context)
+                            )
                     else:
-                        logger.warning(f"Файл {photo_path} не існує")
+                        logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено фото для генератора у місті {city}")
                         await update.message.reply_text(
                             f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
                             reply_markup=create_additional_services_keyboard(city, context)
                         )
-                else:
-                    await update.message.reply_text(
-                        f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
-                        reply_markup=create_additional_services_keyboard(city, context)
-                    )
-                return CHOOSING_ADDITIONAL_SERVICES
             
-        # Якщо це опція послуги
+        # Якщо вибрано опцію послуги
         if 'selected_service' in context.user_data:
             service = context.user_data['selected_service']
-            logger.info(f"Обробка опції для послуги: {service}")
+            logger.info(f"[ADDITIONAL_SERVICES] Обробка опції для послуги: {service}")
             if city in ADDITIONAL_SERVICES_WITH_SUBMENU and service in ADDITIONAL_SERVICES_WITH_SUBMENU[city]:
                 options = ADDITIONAL_SERVICES_WITH_SUBMENU[city][service]
                 for option, price in options.items():
                     if text.startswith(option):
-                        logger.info(f"Знайдено відповідну опцію: {text}")
+                        logger.info(f"[ADDITIONAL_SERVICES] Знайдено відповідну опцію: {text}")
                         if 'additional_services' not in context.user_data:
                             context.user_data['additional_services'] = {}
                         context.user_data['additional_services'][service] = text
                         del context.user_data['selected_service']
-                        logger.info(f"Збережено вибір опції та видалено selected_service")
+                        logger.info(f"[ADDITIONAL_SERVICES] Збережено вибір опції та видалено selected_service")
                         
                         # Визначаємо категорію послуги та знаходимо відповідне фото
                         photo_path = None
                         option_name = option.split(" - ")[0].strip()
-                        logger.info(f"Опція для пошуку фото: {option_name}")
+                        logger.info(f"[ADDITIONAL_SERVICES] Опція для пошуку фото: {option_name}")
                         
-                        if '🎭 Шоу' in service:
-                            photo_path = ADDITIONAL_SERVICES_PHOTOS['ШОУ'].get(option_name.upper())
-                            logger.info(f"Шлях до фото шоу (верхній регістр): {photo_path}")
-                            if not photo_path:  # Спробуємо знайти з першої великої літери
-                                photo_path = ADDITIONAL_SERVICES_PHOTOS['ШОУ'].get(option_name.title())
-                                logger.info(f"Шлях до фото шоу (з великої літери): {photo_path}")
-                        elif '🎨 Майстер-клас' in service:
-                            # Видаляємо кількість дітей з назви для пошуку фото
-                            base_name = option_name.split(" до ")[0] if " до " in option_name else option_name
-                            base_name = base_name.split(" - ")[0] if " - " in base_name else base_name
-                            photo_path = ADDITIONAL_SERVICES_PHOTOS['МАЙСТЕР-КЛАС'].get(base_name)
-                            logger.info(f"Шлях до фото майстер-класу: {photo_path}")
-                        elif '🎨 Декор' in service:
-                            photo_path = ADDITIONAL_SERVICES_PHOTOS['ДЕКОР'].get(option_name)
-                            logger.info(f"Шлях до фото декору: {photo_path}")
-                        elif '🎈 Пін\'яти' in service or '🎈 Пін\'ят' in service:
-                            # Видаляємо кількість пін'ят з назви для пошуку фото
-                            base_name = option_name.split(" (")[0] if " (" in option_name else option_name
-                            photo_path = ADDITIONAL_SERVICES_PHOTOS['ПІНЬЯТИ'].get(base_name)
-                            logger.info(f"Шлях до фото пін'яти: {photo_path}")
-                            
+                        # --- НОВА логіка пошуку фото з урахуванням міста як ключа ---
+                        city_key = None
+                        normalized_city = city.replace('-', '').replace(' ', '').upper()
+                        for ck in ADDITIONAL_SERVICES_PHOTOS.keys():
+                            if ck.replace('-', '').replace(' ', '').upper() == normalized_city:
+                                city_key = ck
+                                break
+                        if not city_key:
+                            logger.error(f"[ADDITIONAL_SERVICES] Не знайдено місто '{city}' у ADDITIONAL_SERVICES_PHOTOS")
+                            await update.message.reply_text("Фото для цієї послуги не знайдено (місто)")
+                            return CHOOSING_ADDITIONAL_SERVICES
+
+                        # 2. Знаходимо тип послуги (ШОУ, МАЙСТЕР-КЛАС...) у цьому місті
+                        service_type = None
+                        for key in ADDITIONAL_SERVICES_PHOTOS[city_key]:
+                            if key.upper() in service.upper() or service.upper() in key.upper():
+                                service_type = key
+                                break
+                        if not service_type:
+                            normalized_service = service.replace('-', '').replace(' ', '').upper()
+                            for key in ADDITIONAL_SERVICES_PHOTOS[city_key]:
+                                if key.replace('-', '').replace(' ', '').upper() in normalized_service or normalized_service in key.replace('-', '').replace(' ', '').upper():
+                                    service_type = key
+                                    break
+                        # Додатковий хак для "ГЕНЕРАТОРА"
+                        if not service_type:
+                            if "ГЕНЕРАТОР" in service.upper() or "БУЛЬБАШОК" in service.upper():
+                                service_type = "ГЕНЕРАТОР"
+                            else:
+                                logger.error(f"[ADDITIONAL_SERVICES] Не знайдено тип послуги '{service}' для міста '{city_key}'")
+                                await update.message.reply_text("Фото для цієї послуги не знайдено (тип)")
+                                return CHOOSING_ADDITIONAL_SERVICES
+
+                        # 3. Шукаємо фото по назві опції
+                        photo_dict = ADDITIONAL_SERVICES_PHOTOS[city_key][service_type]
+                        base_name = option_name.split('-')[0].strip().upper()
+                        photo_path = None
+                        for name in photo_dict:
+                            if name.upper() in base_name or base_name in name.upper():
+                                photo_path = photo_dict[name]
+                                break
+
                         if photo_path:
-                            logger.info(f"Знайдено шлях до фото: {photo_path}")
+                            logger.info(f"[ADDITIONAL_SERVICES] Знайдено шлях до фото: {photo_path}")
                             if os.path.exists(photo_path):
-                                logger.info(f"Файл {photo_path} існує")
+                                logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 await update.message.reply_photo(
                                     photo=open(photo_path, 'rb'),
                                     caption=f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_additional_services_keyboard(city, context)
                                 )
                             else:
-                                logger.warning(f"Файл {photo_path} не існує")
+                                logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує")
                                 await update.message.reply_text(
                                     f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_additional_services_keyboard(city, context)
                                 )
                         else:
-                            logger.warning(f"Не знайдено шлях до фото для опції {option_name}")
+                            logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено шлях до фото для опції {option_name}")
                             await update.message.reply_text(
                                 f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                         return CHOOSING_ADDITIONAL_SERVICES
-        
-        logger.warning(f"Отримано неочікуваний текст: {text}")
+                            
+        logger.warning(f"[ADDITIONAL_SERVICES] Отримано неочікуваний текст: {text}")
         await update.message.reply_text(
             "Будь ласка, використовуйте кнопки для вибору опції.",
             reply_markup=create_additional_services_keyboard(city, context)
@@ -2028,7 +2102,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
         return CHOOSING_ADDITIONAL_SERVICES
         
     except Exception as e:
-        logger.error(f"Помилка при обробці вибору додаткової послуги: {str(e)}")
+        logger.error(f"[ADDITIONAL_SERVICES] Помилка при обробці вибору додаткової послуги: {str(e)}")
         logger.exception(e)  # Додаємо повний стек помилки
         await update.message.reply_text(
             "Вибачте, сталася помилка. Будь ласка, спробуйте ще раз.",
@@ -2045,14 +2119,14 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if district == BACK_BUTTON:
             # Видаляємо останній вибір району
             remove_choice_by_type(context, 'Район')
-            # Повертаємось до вибору додаткових послуг
+            # Повертаємось до вибору району
             await update.message.reply_text(
                 "Оберіть додаткові послуги:",
                 reply_markup=create_additional_services_keyboard(city, context)
             )
             return CHOOSING_ADDITIONAL_SERVICES
             
-        # Перевіряємо, чи існує такий район у конфігурації
+        # Перевіряємо чи існує такий район у конфігурації
         if district not in TAXI_PRICES[city]:
             await update.message.reply_text(
                 "Будь ласка, оберіть район зі списку:",
@@ -2079,7 +2153,7 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return CHOOSING_SUMMARY
         
     except Exception as e:
-        logger.error(f"Помилка при обробці вибору району: {str(e)}")
+        logger.error(f"[DISTRICT] Помилка при обробці вибору району: {str(e)}")
         await update.message.reply_text(
             "Виникла помилка. Будь ласка, спробуйте ще раз.",
             reply_markup=create_district_keyboard(city)
@@ -2120,9 +2194,9 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             if choice['type'] == "Пакет":
                 city = next((c['value'] for c in choices if c['type'] == "Місто"), None)
                 event_type = next((e['value'] for e in choices if e['type'] == "Тип події"), None)
-                logger.info(f"Знайдено пакет: {choice['value']} для міста {city} та типу події {event_type}")
+                logger.info(f"[SUMMARY] Знайдено пакет: {choice['value']} для міста {city} та типу події {event_type}")
                 if city and event_type and city in PAKET_PRICES and event_type in PAKET_PRICES[city]:
-                    logger.info(f"PAKET_PRICES для міста {city} та типу події {event_type}: {PAKET_PRICES[city][event_type]}")
+                    logger.info(f"[SUMMARY] PAKET_PRICES для міста {city} та типу події {event_type}: {PAKET_PRICES[city][event_type]}")
                     if choice['value'] in PAKET_PRICES[city][event_type]:
                         package_price = PAKET_PRICES[city][event_type][choice['value']]
                         total_price += package_price
@@ -2130,6 +2204,7 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             elif choice['type'] == "Квест":
                 import re
                 city = next((c['value'] for c in choices if c['type'] == "Місто"), None)
+                
                 try:
                     match = re.match(r"(.+?\(.*?\))\s*\((.*?)\)$", choice['value'])
                     if match:
@@ -2139,10 +2214,10 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         total_price += price
                         summary += f"Квест: {quest_name} ({duration}) - {price} грн\n"
                     else:
-                        logger.error(f"Не вдалося розпарсити квест: {choice['value']}")
+                        logger.error(f"[SUMMARY] Не вдалося розпарсити квест: {choice['value']}")
                         summary += f"Квест: {choice['value']}: Ціна уточнюється\n"
                 except Exception as e:
-                    logger.error(f"Помилка при обробці ціни квесту: {str(e)}")
+                    logger.error(f"[SUMMARY] Помилка при обробці ціни квесту: {str(e)}")
                     summary += f"Квест: {choice['value']}: Ціна уточнюється\n"
             elif choice['type'] == 'Погодинна ціна':
                 # Витягуємо ціну з тексту
@@ -2188,28 +2263,24 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                                     total_price += price
                             summary += f"➕ {service}: {option}\n"
                         except Exception as e:
-                            logger.error(f"Помилка при обробці ціни для {service}: {str(e)}")
+                            logger.error(f"[SUMMARY] Помилка при обробці ціни для {service}: {str(e)}")
                             summary += f"➕ {service}: {option}\n"
                 except Exception as e:
-                    logger.error(f"Помилка при обробці ціни додаткової послуги: {str(e)}")
+                    logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
                     summary += f"➕ {service}: {option}\n"
         
         # Додаємо вартість таксі
         district = next((choice['value'] for choice in choices if choice['type'] == "Район"), None)
         if district and city:
             try:
-                if city in TAXI_PRICES and district in TAXI_PRICES[city]:
-                    taxi_price = TAXI_PRICES[city][district]
-                    if isinstance(taxi_price, (int, float)):
-                        total_price += taxi_price
-                        summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
-                    else:
-                        summary += f"🚕 Таксі ({district}): {taxi_price}\n"
+                taxi_price = TAXI_PRICES[city][district]
+                if isinstance(taxi_price, (int, float)):
+                    total_price += taxi_price
+                    summary += f"🚕 Таксі ({district}): {taxi_price} грн\n"
                 else:
-                    logger.warning(f"[SUMMARY] Taxi price not found for city={city}, district={district}")
-                    summary += f"🚕 Таксі ({district}): Ціна уточнюється\n"
+                    summary += f"🚕 Таксі ({district}): {taxi_price}\n"
             except Exception as e:
-                logger.error(f"Помилка при обробці ціни таксі: {str(e)}")
+                logger.error(f"[SUMMARY] Помилка при обробці ціни таксі: {str(e)}")
                 summary += f"🚕 Таксі ({district}): Ціна уточнюється\n"
         
         # Додаємо загальну вартість
@@ -2225,7 +2296,7 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         
     except Exception as e:
-        logger.error(f"Помилка при формуванні підсумку: {str(e)} | context.user_data: {context.user_data}")
+        logger.error(f"[SUMMARY] Помилка при формуванні підсумку: {str(e)} | context.user_data: {context.user_data}")
         await update.message.reply_text(
             "❌ Вибачте, сталася помилка при формуванні підсумку. Спробуйте ще раз.",
             reply_markup=create_summary_keyboard()
@@ -2271,7 +2342,7 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return CHOOSING_SUMMARY
             
     except Exception as e:
-        logger.error(f"Помилка при обробці вибору в підсумковому меню: {str(e)}")
+        logger.error(f"[SUMMARY] Помилка при обробці вибору в підсумковому меню: {str(e)}")
         await update.message.reply_text(
             "Виникла помилка. Будь ласка, спробуйте ще раз.",
             reply_markup=create_summary_keyboard()
@@ -2281,39 +2352,53 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка наданих контактів в підсумковому меню"""
     try:
-        text = update.message.text
-        if text == "⬅️ На початок":
-            # Очищаємо всі вибори користувача і повертаємо до вибору міста (як /start)
+        logger.info(f"[SUMMARY_CONTACT] update.message: {update.message}")
+        logger.info(f"[SUMMARY_CONTACT] context.user_data: {context.user_data}")
+        # Якщо натиснуто "На початок"
+        if update.message.text == "⬅️ На початок":
+            logger.info("[SUMMARY_CONTACT] Натиснуто 'На початок'. Очищаю context.user_data.")
             context.user_data.clear()
             await update.message.reply_text(
                 Hello_World,
                 reply_markup=create_city_keyboard()
             )
             return CHOOSING_CITY
-            
-        phone = update.message.contact.phone_number
-        user = update.effective_user
-        contact_info = (
-            f"<b>Контакт від користувача</b>\n"
-            f"ID: <code>{user.id}</code>\n"
-            f"Ім'я: {user.first_name or ''} {user.last_name or ''}\n"
-            f"Username: @{user.username if user.username else '-'}\n"
-            f"Телефон: <code>{phone}</code>"
-        )
-        await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
-        await update.message.reply_text(
-            "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим часом з вами зв'яжуться для уточнення.",
-            reply_markup=create_city_keyboard()
-        )
-        # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
-        user_info = get_unified_user_info(user, user_data.get_user(user.id), update)
-        user_info['phone_number'] = phone
-        user_data.add_user(user.id, user_info)
-        context.user_data.clear()
-        return CHOOSING_CITY
+
+        # Якщо користувач надіслав контакт
+        if update.message.contact:
+            logger.info(f"[SUMMARY_CONTACT] Надіслано контакт: {update.message.contact}")
+            phone = update.message.contact.phone_number
+            user = update.effective_user
+            contact_info = (
+                f"<b>Контакт від користувача</b>\n"
+                f"ID: <code>{user.id}</code>\n"
+                f"Ім'я: {user.first_name or ''} {user.last_name or ''}\n"
+                f"Username: @{user.username if user.username else '-'}\n"
+                f"Телефон: <code>{phone}</code>"
+            )
+            await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
+            await update.message.reply_text(
+                "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим часом з вами зв'яжуться для уточнення.",
+                reply_markup=create_city_keyboard()
+            )
+            # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
+            user_info = get_unified_user_info(user, user_data.get_user(user.id), update)
+            user_info['phone_number'] = phone
+            user_data.add_user(user.id, user_info)
+            logger.info(f"[SUMMARY_CONTACT] Контакт збережено для user_id={user.id}")
+            context.user_data.clear()
+            return CHOOSING_CITY
         
+        # Якщо користувач надіслав щось інше
+        await update.message.reply_text(
+            "Будь ласка, надішліть номер телефону або натисніть '⬅️ На початок'.",
+            reply_markup=create_summary_keyboard()
+        )
+        return CHOOSING_SUMMARY
+
     except Exception as e:
-        logger.error(f"Помилка при обробці наданих контактів в підсумковому меню: {str(e)}")
+        logger.error(f"[SUMMARY_CONTACT] Помилка при обробці наданих контактів в підсумковому меню: {str(e)}")
+        logger.exception(e)
         await update.message.reply_text(
             "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера.",
             reply_markup=create_summary_keyboard()
@@ -2407,9 +2492,9 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
             'last_name': info.get('last_name', ''),
             'language_code': info.get('language_code', ''),
             'is_bot': info.get('is_bot', ''),
-            'status': info.get('status', ''),
+            'status': (info or {}).get('status', ''),
             'last_update': info.get('last_update', ''),
-            'created_at': info.get('created_at', ''),
+            'created_at': (info or {}).get('created_at', ''),
             'phone_number': info.get('phone_number', ''),
             'chat_id': info.get('chat_id', ''),
             'type': info.get('type', ''),
@@ -2506,7 +2591,7 @@ async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_
     summary_lines = [
         f"<b>Нове звернення від користувача</b>",
         f"ID: <code>{user.id}</code>",
-        f"Ім'я: {user.first_name or ''} {user.last_name or ''}",
+        f"Ім'я: {user.full_name}\n",
         f"Username: @{user.username if user.username else '-'}",
         f"Мова: {user.language_code or '-'}",
         f"\n<b>Вибір користувача:</b>"
@@ -2560,7 +2645,10 @@ def main():
             CHOOSING_SERVICE_OPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, additional_services_chosen)],
             CHOOSING_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_chosen)],
             CHOOSING_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, summary_chosen)],
-            PHONE_CONTACT: [MessageHandler(filters.CONTACT, summary_chosen_contact_phone)],
+            PHONE_CONTACT: [
+                MessageHandler(filters.CONTACT, summary_chosen_contact_phone),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, summary_chosen_contact_phone),
+            ],
             
         },
         fallbacks=[CommandHandler('cancel', cancel), CommandHandler('start', start)],
