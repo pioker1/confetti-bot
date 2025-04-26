@@ -8,7 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
-    CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
+    FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
     LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 # КОНСТАНТИ ТА СТАНИ
 # ============================================
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(22)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE,VIPUSK_POGODINNO, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(23)
 
 STATE_NAMES = {
     CHOOSING_CITY: 'CHOOSING_CITY',
@@ -312,6 +312,12 @@ def create_hourly_price_keyboard(city: str, event_type: str) -> ReplyKeyboardMar
         logger.error(f"Помилка при створенні клавіатури погодинних цін: {str(e)}")
         # Повертаємо просту клавіатуру з кнопкою "Назад" у випадку помилки
         return ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
+
+def create_vipusk_pogodinno_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = []
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    keyboard.append([KeyboardButton(CONTACT_MANAGER_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def create_package_keyboard(city: str, event_type: str) -> ReplyKeyboardMarkup:
     """Створює клавіатуру для вибору пакету"""
@@ -687,15 +693,23 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     reply_markup=create_city_keyboard()
                 )
                 return CHOOSING_CITY
-                
-            channel_link = CITY_CHANNELS[city]
-            await update.message.reply_text(
-                f"📅 Афіша подій у місті {city}\n"
-                f"Підписуйтесь на наш канал, щоб бути в курсі всіх подій:\n"
-                f"{channel_link}",
-                reply_markup=create_event_type_keyboard()
-            )
-            return CHOOSING_EVENT_TYPE
+            foto_load = FOTO_AFISHA[city]
+            try:
+                await update.message.reply_photo(open(foto_load, 'rb'))
+                await update.message.reply_text(
+                    f"📅 Афіша подій у місті {city}\n"
+                    f"{CITY_CHANNELS[city]}",
+                    reply_markup=create_event_type_keyboard()
+                )
+                return CHOOSING_EVENT_TYPE
+            except Exception as e:
+                logger.error(f"Фото з афіші прибрано: {str(e)}")
+                await update.message.reply_text(
+                    f"Чекайте на оновлення подій в місті {city}",
+                    reply_markup=create_event_type_keyboard()
+                )
+                return CHOOSING_EVENT_TYPE
+            
         
         elif '🎯 Інше' in event_type:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) 
@@ -1437,6 +1451,15 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             price_key = event_type
             if is_tourbase:
                 price_key = f"{event_type} (турбаза)"
+
+            if (event_type == "🎓 Випускний") or (event_type == "🎓 Випускний" and is_tourbase):
+                
+                await update.message.reply_text(
+                    "Для цього типу події погодинні ціни узгоджуються з менеджером окремо. \n\n"
+                    "Будь ласка, зв'яжіться з менеджером для отримання детальної інформації.",
+                    reply_markup=create_vipusk_pogodinno_keyboard()
+                )
+                return VIPUSK_POGODINNO
             
             # Показуємо погодинні ціни
             await update.message.reply_text(
@@ -1480,6 +1503,38 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return CHOOSING_QWEST
         
     return CHOOSING_FORMAT
+
+async def vipusk_pogodinno_chosen (update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        text = update.message.text
+        if text == BACK_BUTTON:
+            # Повертаємося до вибору формату
+            await update.message.reply_text(
+                "Оберіть формат свята:",
+                reply_markup=create_format_keyboard()
+            )
+            return CHOOSING_FORMAT
+        
+        if text == CONTACT_MANAGER_BUTTON:
+            # 1. Надіслати підсумок менеджеру
+            await send_summary_to_manager(update, context)
+            # 2. Показати користувачу повідомлення про успішне надсилання
+            await update.message.reply_text(
+                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
+                    [KeyboardButton('⬅️ На початок')]
+                ], resize_keyboard=True)
+            )
+            return PHONE_CONTACT
+        
+    except Exception as e:
+        logger.error(f"Помилка в обробці вибору формату: {e}")
+        await update.message.reply_text(
+            "Помилка в обробці вибору формату. Спробуйте ще раз",
+            reply_markup=create_vipusk_pogodinno_keyboard()
+        )
+        return VIPUSK_POGODINNO
 
 async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробляє вибір погодинної ціни"""
@@ -2677,6 +2732,9 @@ def main():
             CHOOSING_THEME_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, theme_details_chosen)],
             CHOOSING_FORMAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, format_chosen)],
             CHOOSING_HOURLY_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, hourly_price_chosen)],
+            VIPUSK_POGODINNO: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, vipusk_pogodinno_chosen),
+                MessageHandler(filters.CONTACT, vipusk_pogodinno_chosen),],
             CHOOSING_PACKAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, package_chosen)],
             CHOOSING_QWEST: [MessageHandler(filters.TEXT & ~filters.COMMAND, qwest_chosen)],
             CHOOSING_QWEST_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, qwest_duration_chosen)],
