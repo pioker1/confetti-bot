@@ -2487,9 +2487,12 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
         # Якщо користувач надіслав щось інше
         await update.message.reply_text(
             "Будь ласка, надішліть номер телефону або натисніть '⬅️ На початок'.",
-            reply_markup=create_summary_keyboard()
+            reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
+                    [KeyboardButton('⬅️ На початок')]
+                ], resize_keyboard=True)
         )
-        return CHOOSING_SUMMARY
+        return PHONE_CONTACT
 
     except Exception as e:
         logger.error(f"[SUMMARY_CONTACT] Помилка при обробці наданих контактів в підсумковому меню: {str(e)}")
