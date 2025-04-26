@@ -139,17 +139,22 @@ MANAGER_CONTACT_MESSAGES = {
 
 # Отримання та конвертація ID менеджера
 try:
-    MANAGER_CHAT_ID = int(os.getenv('MANAGER_CHAT_ID'))
-    logger.info(f"ID менеджера успішно завантажено: {MANAGER_CHAT_ID}")
+    MANAGER_CHAT_ID_KIEV = int(os.getenv('MANAGER_CHAT_ID_KIEV'))
+    MANAGER_CHAT_ID_KR = int(os.getenv('MANAGER_CHAT_ID_KR'))
+    logger.info(f"ID менеджера Київ успішно завантажено: {MANAGER_CHAT_ID_KIEV}")
+    logger.info(f"ID менеджера Кривий Ріг успішно завантажено: {MANAGER_CHAT_ID_KR}")
 except (TypeError, ValueError) as e:
     logger.error(f"Помилка при завантаженні ID менеджера: {str(e)}")
-    MANAGER_CHAT_ID = None
+    MANAGER_CHAT_ID_KIEV = None
+    MANAGER_CHAT_ID_KR = None
 
 # Перевірка наявності необхідних змінних
 if not TELEGRAM_BOT_TOKEN:
     logger.error("Не знайдено токен бота в змінних середовища")
-if not MANAGER_CHAT_ID:
-    logger.error("Не знайдено ID менеджера в змінних середовища")
+if not MANAGER_CHAT_ID_KIEV:
+    logger.error("Не знайдено ID менеджера Київ в змінних середовища")
+if not MANAGER_CHAT_ID_KR:
+    logger.error("Не знайдено ID менеджера Кривий Ріг в змінних середовища")
 
 # Налаштування кнопок меню
 CITIES = ['Київ', 'Кривий Ріг']
