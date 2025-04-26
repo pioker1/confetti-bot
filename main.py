@@ -8,7 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
-    FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID,
+    FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
     LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
@@ -628,6 +628,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     visits = old_visits + 1
     user_info = get_unified_user_info(user, old_user, update)
     user_info['visits'] = visits
+    user_info['chat_id'] = update.effective_chat.id
     user_data.add_user(user.id, user_info)
     
     # Скидаємо стару клавіатуру
@@ -928,7 +929,16 @@ async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 f"User ID: {user.id}\n\n"
                 "Замовлення сімейного свята\n"
             )
-            await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=order_message)
+            if (context.user_data.get('city') == 'Київ'):
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
+            elif (context.user_data.get('city') == 'Кривий Ріг'):
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
+            else:
+                MANAGER_CHAT_ID = None
+            if MANAGER_CHAT_ID is not None:
+                await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=order_message)
+            else:
+                logger.error(f"[FAMILY_DOP_CHOSEN] Менеджерський чат ID не знайдено для міста: {context.user_data.get('city')}")
             
             # Відповідь користувачу
             await update.message.reply_text(
@@ -2471,7 +2481,16 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
                 f"Username: @{user.username if user.username else '-'}\n"
                 f"Телефон: <code>{phone}</code>"
             )
-            await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
+            if (context.user_data.get('city') == 'Київ'):
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
+            elif (context.user_data.get('city') == 'Кривий Ріг'):
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
+            else:
+                MANAGER_CHAT_ID = None
+            if MANAGER_CHAT_ID is not None:
+                await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
+            else:
+                logger.error(f"[SUMMARY_CONTACT] Менеджерський чат ID не знайдено для міста: {context.user_data.get('city')}")
             await update.message.reply_text(
                 "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим часом з вами зв'яжуться для уточнення.",
                 reply_markup=create_city_keyboard()
@@ -2574,7 +2593,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Відправка менеджеру файлу з усіма користувачами у правильному форматі"""
     user_id = update.effective_user.id
-    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+    if user_id not in [MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR]:
         await update.message.reply_text("⛔ Доступ заборонено")
         return
     data = []
@@ -2612,7 +2631,7 @@ async def export_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     await context.bot.send_document(
-        chat_id=MANAGER_CHAT_ID,
+        chat_id=user_id,
         document=buffer,
         filename="users.xlsx",
         caption="📋 Список всіх користувачів"
@@ -2624,7 +2643,7 @@ from telegram.constants import ChatAction
 async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Розсилка повідомлення/файлу всім користувачам (тільки для менеджера)"""
     user_id = update.effective_user.id
-    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+    if user_id not in [MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR]:
         await update.message.reply_text("⛔ Доступ заборонено")
         return
     if not context.args and not update.message.reply_to_message:
@@ -2659,7 +2678,7 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
 async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Звернення до конкретного користувача: /hello ID повідомлення (тільки для менеджера)"""
     user_id = update.effective_user.id
-    if MANAGER_CHAT_ID is None or user_id != MANAGER_CHAT_ID:
+    if user_id not in [MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR]:
         await update.message.reply_text("⛔ Доступ заборонено")
         return
     if not context.args or len(context.args) < 2:
@@ -2702,10 +2721,20 @@ async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_
             summary_lines.append(f"➕ {service}: {option}")
     summary = '\n'.join(summary_lines)
     logger.info(f"[SEND_SUMMARY] summary to send: {summary}")
-    logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID: {MANAGER_CHAT_ID}")
+    logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID_KIEV: {MANAGER_CHAT_ID_KIEV}")
+    logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID_KR: {MANAGER_CHAT_ID_KR}")
     try:
-        await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=summary, parse_mode='HTML')
-        logger.info("[SEND_SUMMARY] Повідомлення менеджеру успішно надіслано!")
+        if (context.user_data.get('city') == 'Київ'):
+            MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
+        elif (context.user_data.get('city') == 'Кривий Ріг'):
+            MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
+        else:
+            MANAGER_CHAT_ID = None
+        if MANAGER_CHAT_ID is not None:
+            await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=summary, parse_mode='HTML')
+            logger.info("[SEND_SUMMARY] Повідомлення менеджеру успішно надіслано!")
+        else:
+            logger.error(f"[SEND_SUMMARY] Менеджерський чат ID не знайдено для міста: {context.user_data.get('city')}")
     except Exception as e:
         logger.error(f"Не вдалося надіслати підсумок менеджеру: {e}")
 
