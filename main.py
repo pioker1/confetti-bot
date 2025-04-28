@@ -663,7 +663,7 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     # Показуємо типи подій
     await update.message.reply_text(
-        "Оберіть яку подію будете святкувати:",
+        "Оберіть, яку подію будете святкувати:",
         reply_markup=create_event_type_keyboard()
     )
     
@@ -1292,18 +1292,18 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 with open(photo_url, 'rb') as photo:
                     await update.message.reply_photo(
                         photo=photo,
-                        caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                        caption=f"\nЧудовий вибір! \nОберіть опцію:",
                         reply_markup=create_theme_details_keyboard()
                     )
             else:
                 await update.message.reply_photo(
                     photo=photo_url,
-                    caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                    caption=f"\nЧудовий вибір! \nОберіть опцію:",
                     reply_markup=create_theme_details_keyboard()
                 )
         else:
             await update.message.reply_text(
-                f"🎨 {subtheme}\n\nОберіть опцію:",
+                f"🎨 {subtheme}\n\nЧудовий вибір! Оберіть опцію:",
                 reply_markup=create_theme_details_keyboard()
             )
         
