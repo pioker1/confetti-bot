@@ -1478,7 +1478,7 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             # Показуємо погодинні ціни
             await update.message.reply_text(
                 f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
-                ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else "") + ":",
+                ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
                 reply_markup=create_hourly_price_keyboard(city, price_key)
             )
             return CHOOSING_HOURLY_PRICE
@@ -1622,10 +1622,9 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             # Відправляємо повідомлення про вибір
             await update.message.reply_text(
-                f"Ви обрали: {price_name}\n"
-                f"Вартість: {price_value}\n"
+                f"🎉 Ви обрали: {price_name}\n"
+                f"💰 Вартість: {price_value}\n"
                 f"{min_duration_info}\n\n"
-                "Для уточнення деталей та бронювання, будь ласка, зв'яжіться з менеджером."
             )
             
             # Показуємо фінальне меню формату   
@@ -2052,7 +2051,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
         if city in ADDITIONAL_SERVICES_WITH_SUBMENU and text in ADDITIONAL_SERVICES_WITH_SUBMENU[city]:
             logger.info(f"[ADDITIONAL_SERVICES] Вибрано послугу з підменю: {text}")
             await update.message.reply_text(
-                f"Виберіть опцію для послуги '{text}':",
+                f"Оберіть яке саме ви хотіли б додати '{text}':",
                 reply_markup=create_service_options_keyboard(city, text)
             )
             context.user_data['selected_service'] = text
@@ -2192,7 +2191,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         else:
                             logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено шлях до фото для опції {option_name}")
                             await update.message.reply_text(
-                                f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
+                                f"'{text}' для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
