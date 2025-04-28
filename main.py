@@ -929,12 +929,17 @@ async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 f"User ID: {user.id}\n\n"
                 "Замовлення сімейного свята\n"
             )
-            if (context.user_data.get('city') == 'Київ'):
+            city = (
+    context.user_data.get('selected_city')
+    or context.user_data.get('city')
+    or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+)
+            if city == 'Київ':
                 MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
-            elif (context.user_data.get('city') == 'Кривий Ріг'):
+            elif city == 'Кривий Ріг':
                 MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
             else:
-                MANAGER_CHAT_ID = None
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV  # дефолт
             if MANAGER_CHAT_ID is not None:
                 await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=order_message)
             else:
@@ -1940,8 +1945,11 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
     """Обробляє вибір додаткової послуги (просту або з підменю)"""
     try:
         text = update.message.text
-        city = context.user_data.get('selected_city')
-
+        city = (
+            context.user_data.get('selected_city')
+            or context.user_data.get('city')
+            or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+        )
         logger.info(f"[ADDITIONAL_SERVICES] Отримано текст: {text}")
         logger.info(f"[ADDITIONAL_SERVICES] Поточне місто: {city}")
         logger.info(f"[ADDITIONAL_SERVICES] context.user_data: {context.user_data}")
@@ -2212,7 +2220,11 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Обробка вибору району"""
     try:
         district = update.message.text
-        city = context.user_data.get('selected_city')
+        city = (
+            context.user_data.get('selected_city')
+            or context.user_data.get('city')
+            or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+        )
         
         if district == BACK_BUTTON:
             # Видаляємо останній вибір району
@@ -2280,11 +2292,11 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         summary += "\n💰 Деталі вартості:\n"
         
         # Додаємо на початку функції (після отримання choices):
-        city = context.user_data.get('selected_city')
-        if not city:
-            city = next((choice['value'] for choice in choices 
-                        if choice['type'] == "Місто"), None)
-        
+        city = (
+            context.user_data.get('selected_city')
+            or context.user_data.get('city')
+            or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+        )
         # Підраховуємо загальну вартість
         total_price = 0
         
@@ -2405,7 +2417,11 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Обробка вибору в підсумковому меню"""
     try:
         text = update.message.text
-        city = context.user_data.get('selected_city')
+        city = (
+            context.user_data.get('selected_city')
+            or context.user_data.get('city')
+            or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+        )
         if not city:
             city = next((choice['value'] for choice in context.user_data.get('choices', []) if choice['type'] == "Місто"), None)
         
@@ -2475,12 +2491,17 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
                 f"Username: @{user.username if user.username else '-'}\n"
                 f"Телефон: <code>{phone}</code>"
             )
-            if (context.user_data.get('city') == 'Київ'):
+            city = (
+                context.user_data.get('selected_city')
+                or context.user_data.get('city')
+                or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+            )
+            if city == 'Київ':
                 MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
-            elif (context.user_data.get('city') == 'Кривий Ріг'):
+            elif city == 'Кривий Ріг':
                 MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
             else:
-                MANAGER_CHAT_ID = None
+                MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV  # дефолт
             if MANAGER_CHAT_ID is not None:
                 await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=contact_info, parse_mode='HTML')
             else:
@@ -2718,9 +2739,14 @@ async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_
     logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID_KIEV: {MANAGER_CHAT_ID_KIEV}")
     logger.info(f"[SEND_SUMMARY] MANAGER_CHAT_ID_KR: {MANAGER_CHAT_ID_KR}")
     try:
-        if (context.user_data.get('city') == 'Київ'):
+        city = (
+            context.user_data.get('selected_city')
+            or context.user_data.get('city')
+            or next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Місто'), None)
+        )
+        if city == 'Київ':
             MANAGER_CHAT_ID = MANAGER_CHAT_ID_KIEV
-        elif (context.user_data.get('city') == 'Кривий Ріг'):
+        elif city == 'Кривий Ріг':
             MANAGER_CHAT_ID = MANAGER_CHAT_ID_KR
         else:
             MANAGER_CHAT_ID = None
@@ -2728,7 +2754,10 @@ async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.send_message(chat_id=MANAGER_CHAT_ID, text=summary, parse_mode='HTML')
             logger.info("[SEND_SUMMARY] Повідомлення менеджеру успішно надіслано!")
         else:
-            logger.error(f"[SEND_SUMMARY] Менеджерський чат ID не знайдено для міста: {context.user_data.get('city')}")
+            logger.warning(f"[SEND_SUMMARY] Менеджерський чат ID не знайдено для міста: {city}")
+            logger.warning(f"[SEND_SUMMARY] Надсилаємо замовлення на Київ за замовчуванням")
+            await context.bot.send_message(chat_id=MANAGER_CHAT_ID_KIEV, text=summary, parse_mode='HTML')
+            logger.info("[SEND_SUMMARY] Повідомлення менеджеру Київ (дефолт) успішно надіслано!")
     except Exception as e:
         logger.error(f"Не вдалося надіслати підсумок менеджеру: {e}")
 
