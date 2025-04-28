@@ -1704,7 +1704,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_photo(
                     photo=photo,
                     caption=f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
-                            f"Для замовлення цього пакету зв'яжіться з нашим менеджером:",
+                            f"Чудовий вибір! 👍",
                     reply_markup=create_final_keyboard()
                 )
         else:
@@ -1712,7 +1712,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.warning(f"Файл не знайдено: {photo_path}")
             await update.message.reply_text(
                 f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
-                f"Для замовлення цього пакету зв'яжіться з нашим менеджером:",
+                f"Чудовий вибір! 👍",
                 reply_markup=create_final_keyboard()
             )
             
