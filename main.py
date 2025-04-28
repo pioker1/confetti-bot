@@ -1292,18 +1292,18 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 with open(photo_url, 'rb') as photo:
                     await update.message.reply_photo(
                         photo=photo,
-                        caption=f"\nЧудовий вибір! \nОберіть опцію:",
+                        caption=f"\nЧудовий вибір! \nОберіть:",
                         reply_markup=create_theme_details_keyboard()
                     )
             else:
                 await update.message.reply_photo(
                     photo=photo_url,
-                    caption=f"\nЧудовий вибір! \nОберіть опцію:",
+                    caption=f"\nЧудовий вибір! \nОберіть:",
                     reply_markup=create_theme_details_keyboard()
                 )
         else:
             await update.message.reply_text(
-                f"🎨 {subtheme}\n\nЧудовий вибір! Оберіть опцію:",
+                f"🎨 {subtheme}\n\nЧудовий вибір! Оберіть:",
                 reply_markup=create_theme_details_keyboard()
             )
         
@@ -1418,18 +1418,18 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     with open(photo_url, 'rb') as photo:
                         await update.message.reply_photo(
                             photo=photo,
-                            caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                            caption=f"🎨 {subtheme}\n\nОберіть:",
                             reply_markup=create_theme_details_keyboard()
                         )
                 else:
                     await update.message.reply_photo(
                         photo=photo_url,
-                        caption=f"🎨 {subtheme}\n\nОберіть опцію:",
+                        caption=f"🎨 {subtheme}\n\nОберіть:",
                         reply_markup=create_theme_details_keyboard()
                     )
             else:
                 await update.message.reply_text(
-                    f"🎨 {subtheme}\n\nОберіть опцію:",
+                    f"🎨 {subtheme}\n\nОберіть:",
                     reply_markup=create_theme_details_keyboard()
                 )
             return CHOOSING_THEME_DETAILS
@@ -2129,7 +2129,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 context.user_data['additional_services'] = {}
                             context.user_data['additional_services'][service] = text
                             await update.message.reply_text(
-                                f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
+                                f"{text} для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
@@ -2177,14 +2177,14 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 await update.message.reply_photo(
                                     photo=open(photo_path, 'rb'),
-                                    caption=f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
+                                    caption=f"{text} для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_additional_services_keyboard(city, context)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
                             else:
                                 logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує")
                                 await update.message.reply_text(
-                                    f"Опцію '{text}' для послуги '{service}' додано до вашого вибору.",
+                                    f"{text} для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_additional_services_keyboard(city, context)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
