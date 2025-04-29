@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP, ADDITIONAL_SERVICES_DESCRIPTIONS
 )
 from user_data import user_data
 from datetime import datetime
@@ -1725,7 +1725,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Помилка при обробці вибору пакету: {str(e)}")
         await update.message.reply_text(
-            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера."
+            "Вибачте, сталася помилка. Спробуйте ще раз, перезапустивши бота через вкладку Menu"
         )
         return ConversationHandler.END
     
@@ -1781,7 +1781,7 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     except Exception as e:
         logger.error(f"Помилка при обробці вибору квесту: {str(e)}")
         await update.message.reply_text(
-            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера.",
+            "Вибачте, сталася помилка. Спробуйте ще раз, перезапустивши бота через вкладку Menu",
             reply_markup=create_theme_details_keyboard()
         )
         return CHOOSING_THEME
@@ -1857,7 +1857,7 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"Помилка при обробці вибору тривалості квесту: {str(e)}")
         await update.message.reply_text(
-            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера."
+            "Вибачте, сталася помилка. Спробуйте ще раз, перезапустивши бота через вкладку Menu"
         )
         return ConversationHandler.END
 
@@ -2124,7 +2124,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     elif text.strip().startswith(option.strip()):
                         found = True
                     if found:
-                        if service == "🎁 Єкспрес привітання":
+                        if service == "🎁 Єкспрес привітання" or "ДЕКОР" in service.upper() or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
                             context.user_data['additional_services'][service] = text
@@ -2133,7 +2133,24 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
-                        # Далі йде логіка пошуку фото
+                        # --- ДЕКОР та деякі складні послуги: лише текст, без фото ---
+                        no_photo_services = []
+                        if city == "Київ":
+                            no_photo_services = ["ДЕКОР", "🎭 Шоу", "🎨 Майстер-клас"]
+                        elif city == "Кривий Ріг":
+                            no_photo_services = ["ДЕКОР"]
+                        if service in no_photo_services:
+                            if 'additional_services' not in context.user_data:
+                                context.user_data['additional_services'] = {}
+                            context.user_data['additional_services'][service] = text
+                            del context.user_data['selected_service']
+                            desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
+                            await update.message.reply_text(
+                                f"{text} для послуги '{service}' додано до вашого вибору.\n{desc}",
+                                reply_markup=create_additional_services_keyboard(city, context)
+                            )
+                            return CHOOSING_ADDITIONAL_SERVICES
+                        # --- Далі йде логіка пошуку фото для інших послуг ---
                         logger.info(f"[ADDITIONAL_SERVICES] Знайдено відповідну опцію: {text}")
                         if 'additional_services' not in context.user_data:
                             context.user_data['additional_services'] = {}
@@ -2529,7 +2546,7 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
         logger.error(f"[SUMMARY_CONTACT] Помилка при обробці наданих контактів в підсумковому меню: {str(e)}")
         logger.exception(e)
         await update.message.reply_text(
-            "Вибачте, сталася помилка. Спробуйте ще раз або зверніться до менеджера.",
+            "Вибачте, сталася помилка. Спробуйте ще раз, перезапустивши бота через вкладку Menu",
             reply_markup=create_summary_keyboard()
         )
         return CHOOSING_SUMMARY
