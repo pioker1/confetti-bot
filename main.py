@@ -2575,7 +2575,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Відновлюємо відповідний стан на основі останнього вибору
     if last_choice['type'] == "Місто":
         await update.message.reply_text(
-            "Оберіть яку подію будете святкувати:",
+            "Оберіть, яку подію будете святкувати:",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
