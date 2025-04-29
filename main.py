@@ -1988,6 +1988,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
         # --- Видалення, кнопка Назад ---
         if text == BACK_BUTTON:
             logger.info("[ADDITIONAL_SERVICES] Натиснуто кнопку НАЗАД")
+            # 1. Вихід з режиму видалення послуг
             if context.user_data.get('removing_services'):
                 logger.info("Виходимо з режиму видалення послуг")
                 del context.user_data['removing_services']
@@ -1996,7 +1997,9 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     reply_markup=create_additional_services_keyboard(city, context)
                 )
                 return CHOOSING_ADDITIONAL_SERVICES
-            elif 'selected_service' in context.user_data:
+
+            # 2. Якщо є вибрана послуга — прибираємо її
+            if 'selected_service' in context.user_data:
                 logger.info(f"Видаляємо вибрану послугу: {context.user_data['selected_service']}")
                 del context.user_data['selected_service']
                 await update.message.reply_text(
@@ -2004,27 +2007,80 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     reply_markup=create_additional_services_keyboard(city, context)
                 )
                 return CHOOSING_ADDITIONAL_SERVICES
-            else:
-                logger.info("[ADDITIONAL_SERVICES] Повертаємось до вибору формату та очищуємо додаткові послуги")
-                if 'additional_services' in context.user_data:
-                    logger.info(f"[ADDITIONAL_SERVICES] Видаляємо всі додаткові послуги: {context.user_data['additional_services']}")
-                    del context.user_data['additional_services']
-                    choices = context.user_data.get('choices', [])
-                    last_format_idx = None
-                    for i in range(len(choices)-1, -1, -1):
-                        if choices[i]['type'] == 'Формат':
-                            last_format_idx = i
-                            break
-                    if last_format_idx is not None:
-                        context.user_data['choices'] = choices[:last_format_idx]
-                    for k in ['selected_qwest', 'selected_paket', 'selected_hourly']:
-                        if k in context.user_data:
-                            del context.user_data[k]
+
+            # Отримуємо останній вибір
+            user_choices = context.user_data.get('choices', [])
+            last_choice = next((choice for choice in reversed(user_choices) 
+                            if choice['type'] in ['Квест', 'Пакет', 'Погодинна ціна']), None)
+            # Знаходимо місто та тип події
+            city = next((choice['value'] for choice in user_choices 
+                        if choice['type'] == "Місто"), None)
+            event_type = next((choice['value'] for choice in user_choices 
+                            if choice['type'] == "Тип події"), None)
+            
+            # Знаходимо вибрану локацію
+            location = next((choice['value'] for choice in user_choices 
+                            if choice['type'] == "Локація"), None)
+
+            
+            if not last_choice:
                 await update.message.reply_text(
                     "Оберіть формат свята:",
                     reply_markup=create_format_keyboard()
                 )
                 return CHOOSING_FORMAT
+                
+            # Видаляємо останній вибір
+            remove_choice_by_type(context, last_choice['type'])
+            
+            # Повертаємося до відповідного стану
+            if last_choice['type'] == 'Квест':
+                city = context.user_data.get('selected_city')
+                if not city:
+                    # Якщо місто не знайдено в context.user_data, пробуємо знайти в choices
+                    city = next((choice['value'] for choice in user_choices 
+                            if choice['type'] == "Місто"), None)
+                
+                if not city:
+                    await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
+                    return ConversationHandler.END
+                    
+                # Зберігаємо місто в context.user_data для подальшого використання
+                context.user_data['selected_city'] = city
+                    
+                await update.message.reply_text(
+                    f"🎮 Доступні квести у місті {city}:",
+                    reply_markup=create_qwest_keyboard(city)
+                )
+                return CHOOSING_QWEST
+            elif last_choice['type'] == 'Пакет':
+                # Перевіряємо, чи це випускний або день народження
+                if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                    # Показуємо пакетні пропозиції
+                    await update.message.reply_text(
+                        f"📦 Пакетні пропозиції для {event_type} у місті {city}:",
+                        reply_markup=create_package_keyboard(city, event_type)
+                    )
+                    return CHOOSING_PACKAGE
+
+            elif last_choice['type'] == 'Погодинна ціна':
+                # Перевіряємо, чи це випускний або день народження
+                if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                    # Перевіряємо, чи це заміський комплекс
+                    is_tourbase = location and "🏰 Заміський комплекс" in location
+                    
+                    # Визначаємо ключ для цін
+                    price_key = event_type
+                if is_tourbase:
+                    price_key = f"{event_type} (турбаза)"
+                
+                # Показуємо погодинні ціни
+                await update.message.reply_text(
+                    f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
+                    ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
+                    reply_markup=create_hourly_price_keyboard(city, price_key)
+                )
+                return CHOOSING_HOURLY_PRICE
 
         # --- Показати вибрані послуги ---
         if text == SHOW_SELECTED_SERVICES_BUTTON:
@@ -2156,7 +2212,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             context.user_data['additional_services'][service] = text
                             await update.message.reply_text(
                                 f"{text} для послуги '{service}' додано до вашого вибору.",
-                                reply_markup=create_additional_services_keyboard(city, context)
+                                reply_markup=create_service_options_keyboard(city, service)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
                         # --- ДЕКОР та деякі складні послуги: лише текст, без фото ---
@@ -2169,11 +2225,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
                             context.user_data['additional_services'][service] = text
-                            del context.user_data['selected_service']
                             desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
                             await update.message.reply_text(
                                 f"{text} для послуги '{service}' додано до вашого вибору.\n{desc}",
-                                reply_markup=create_additional_services_keyboard(city, context)
+                                reply_markup=create_service_options_keyboard(city, service)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
                         # --- Далі йде логіка пошуку фото для інших послуг ---
@@ -2181,8 +2236,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         if 'additional_services' not in context.user_data:
                             context.user_data['additional_services'] = {}
                         context.user_data['additional_services'][service] = text
-                        del context.user_data['selected_service']
-                        logger.info(f"[ADDITIONAL_SERVICES] Збережено вибір опції та видалено selected_service")
+                        logger.info(f"[ADDITIONAL_SERVICES] Збережено вибір опції")
                         # Визначаємо категорію послуги та знаходимо відповідне фото
                         photo_path = None
                         option_name = option.split(" - ")[0].strip()
@@ -2221,21 +2275,21 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 await update.message.reply_photo(
                                     photo=open(photo_path, 'rb'),
                                     caption=f"{text} для послуги '{service}' додано до вашого вибору.",
-                                    reply_markup=create_additional_services_keyboard(city, context)
+                                    reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
                             else:
                                 logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує")
                                 await update.message.reply_text(
                                     f"{text} для послуги '{service}' додано до вашого вибору.",
-                                    reply_markup=create_additional_services_keyboard(city, context)
+                                    reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
                         else:
                             logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено шлях до фото для опції {option_name}")
                             await update.message.reply_text(
                                 f"'{text}' для послуги '{service}' додано до вашого вибору.",
-                                reply_markup=create_additional_services_keyboard(city, context)
+                                reply_markup=create_service_options_keyboard(city, service)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
 
