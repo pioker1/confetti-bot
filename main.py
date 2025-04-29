@@ -2120,13 +2120,17 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 message = "❗️ Ви не вибрали жодної додаткової послуги.\n\n"
             else:
                 message = "🎉 Ваші вибрані додаткові послуги:\n\n"
-                for service, option in context.user_data['additional_services'].items():
-                    message += f"• {service}: {option}\n"
-            message += "\n🚕 Будь ласка, оберіть ваш район для розрахунку вартості таксі:"
-            await update.message.reply_text(
-                message,
-                reply_markup=create_district_keyboard(city)
-            )
+                for service, options in context.user_data['additional_services'].items():
+                    if isinstance(options, list):
+                        for option in options:
+                            message += f"• {service}: {option}\n"
+                    else:
+                        message += f"• {service}: {options}\n"
+                message += "\n🚕 Будь ласка, оберіть ваш район для розрахунку вартості таксі:"
+                await update.message.reply_text(
+                    message,
+                    reply_markup=create_district_keyboard(city)
+                )
             return CHOOSING_DISTRICT
 
         # --- Якщо вибрано послугу з підменю ---
@@ -2209,7 +2213,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         if service == "🎁 Єкспрес привітання" or "ДЕКОР" in service.upper() or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
-                            context.user_data['additional_services'][service] = text
+                            if service not in context.user_data['additional_services']:
+                                context.user_data['additional_services'][service] = []
+                            if text not in context.user_data['additional_services'][service]:
+                                context.user_data['additional_services'][service].append(text)
                             await update.message.reply_text(
                                 f"{text} для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_service_options_keyboard(city, service)
@@ -2224,7 +2231,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         if service in no_photo_services:
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
-                            context.user_data['additional_services'][service] = text
+                            if service not in context.user_data['additional_services']:
+                                context.user_data['additional_services'][service] = []
+                            if text not in context.user_data['additional_services'][service]:
+                                context.user_data['additional_services'][service].append(text)
                             desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
                             await update.message.reply_text(
                                 f"{text} для послуги '{service}' додано до вашого вибору.\n{desc}",
@@ -2235,7 +2245,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         logger.info(f"[ADDITIONAL_SERVICES] Знайдено відповідну опцію: {text}")
                         if 'additional_services' not in context.user_data:
                             context.user_data['additional_services'] = {}
-                        context.user_data['additional_services'][service] = text
+                        if service not in context.user_data['additional_services']:
+                            context.user_data['additional_services'][service] = []
+                        if text not in context.user_data['additional_services'][service]:
+                            context.user_data['additional_services'][service].append(text)
                         logger.info(f"[ADDITIONAL_SERVICES] Збережено вибір опції")
                         # Визначаємо категорію послуги та знаходимо відповідне фото
                         photo_path = None
@@ -2435,17 +2448,53 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     summary += f"Погодинна оплата: {price_text}\n"
         
         # Додаємо ціни за додаткові послуги
-        if 'additional_services' in context.user_data:
-            for service, option in context.user_data['additional_services'].items():
+        for service, options in context.user_data['additional_services'].items():
+            # options може бути або рядком (str), або списком (list)
+            if isinstance(options, list):
+                for option in options:
+                    try:
+                        # Підтримка формату: просто число з "грн" (наприклад, "4000 грн")
+                        if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
+                            price = int(option.strip().split()[0])
+                            total_price += price
+                            summary += f"➕ {service}: {option}\n"
+                        elif ' - ' in option:
+                            # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
+                            price_str = option.split(' - ')[-1]
+                            if 'грн' in price_str:
+                                try:
+                                    price = int(price_str.split()[0])
+                                    total_price += price
+                                    summary += f"➕ {service}: {option}\n"
+                                except ValueError:
+                                    summary += f"➕ {service}: {option}\n"
+                            else:
+                                summary += f"➕ {service}: {option}\n"
+                        else:
+                            # Для майстер-класів та інших послуг з форматом "НАЗВА - ДЕТАЛІ - ЦІНА"
+                            try:
+                                parts = option.split(' - ')
+                                if len(parts) >= 2:
+                                    price_str = parts[-1]
+                                    if 'грн' in price_str:
+                                        price = int(price_str.split()[0])
+                                        total_price += price
+                                summary += f"➕ {service}: {option}\n"
+                            except Exception as e:
+                                logger.error(f"[SUMMARY] Помилка при обробці ціни для {service}: {str(e)}")
+                                summary += f"➕ {service}: {option}\n"
+                    except Exception as e:
+                        logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
+                        summary += f"➕ {service}: {option}\n"
+            else:
+                option = options
                 try:
-                    # Підтримка формату: просто число з "грн" (наприклад, "4000 грн")
-                    if isinstance(option, str) and option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
+                    if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
                         price = int(option.strip().split()[0])
                         total_price += price
                         summary += f"➕ {service}: {option}\n"
                     elif ' - ' in option:
-                        # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
-                        price_str = option.split(' - ')[1]
+                        price_str = option.split(' - ')[-1]
                         if 'грн' in price_str:
                             try:
                                 price = int(price_str.split()[0])
@@ -2456,12 +2505,9 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         else:
                             summary += f"➕ {service}: {option}\n"
                     else:
-                        # Для майстер-класів та інших послуг з форматом "НАЗВА - ДЕТАЛІ - ЦІНА"
                         try:
-                            # Розбиваємо рядок на частини
                             parts = option.split(' - ')
                             if len(parts) >= 2:
-                                # Беремо останню частину як ціну
                                 price_str = parts[-1]
                                 if 'грн' in price_str:
                                     price = int(price_str.split()[0])
