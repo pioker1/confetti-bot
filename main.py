@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP, ADDITIONAL_SERVICES_DESCRIPTIONS
+    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -1870,6 +1870,16 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         user_choices = context.user_data.get('choices', [])
         last_choice = next((choice for choice in reversed(user_choices) 
                           if choice['type'] in ['Квест', 'Пакет', 'Погодинна ціна']), None)
+        # Знаходимо місто та тип події
+        city = next((choice['value'] for choice in user_choices 
+                    if choice['type'] == "Місто"), None)
+        event_type = next((choice['value'] for choice in user_choices 
+                        if choice['type'] == "Тип події"), None)
+        
+        # Знаходимо вибрану локацію
+        location = next((choice['value'] for choice in user_choices 
+                        if choice['type'] == "Локація"), None)
+
         
         if not last_choice:
             await update.message.reply_text(
@@ -1902,17 +1912,33 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             )
             return CHOOSING_QWEST
         elif last_choice['type'] == 'Пакет':
-            await update.message.reply_text(
-                "Оберіть формат свята:",
-                reply_markup=create_format_keyboard()
-            )
-            return CHOOSING_FORMAT
+            # Перевіряємо, чи це випускний або день народження
+            if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                # Показуємо пакетні пропозиції
+                await update.message.reply_text(
+                    f"📦 Пакетні пропозиції для {event_type} у місті {city}:",
+                    reply_markup=create_package_keyboard(city, event_type)
+                )
+                return CHOOSING_PACKAGE
+
         elif last_choice['type'] == 'Погодинна ціна':
+            # Перевіряємо, чи це випускний або день народження
+            if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                # Перевіряємо, чи це заміський комплекс
+                is_tourbase = location and "🏰 Заміський комплекс" in location
+                
+                # Визначаємо ключ для цін
+                price_key = event_type
+            if is_tourbase:
+                price_key = f"{event_type} (турбаза)"
+            
+            # Показуємо погодинні ціни
             await update.message.reply_text(
-                "Оберіть формат свята:",
-                reply_markup=create_format_keyboard()
+                f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
+                ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
+                reply_markup=create_hourly_price_keyboard(city, price_key)
             )
-            return CHOOSING_FORMAT
+            return CHOOSING_HOURLY_PRICE
             
     elif text == WOW_BUTTON:
         # Показуємо меню додаткових послуг
