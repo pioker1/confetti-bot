@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES, LOCATIONS, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES, LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -2135,13 +2135,21 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
 
         # --- Якщо вибрано послугу з підменю ---
         if city in ADDITIONAL_SERVICES_WITH_SUBMENU and text in ADDITIONAL_SERVICES_WITH_SUBMENU[city]:
-            logger.info(f"[ADDITIONAL_SERVICES] Вибрано послугу з підменю: {text}")
-            await update.message.reply_text(
-                f"Оберіть яке саме ви хотіли б додати '{text}':",
+            logger.info(f"[MASTER_CLASS_EXPLANATION] Вибрано послугу з підменю: {text}")
+            if text == "🎨 Майстер-клас":
+                await update.message.reply_text(
+                f"{MASTER_CLASS_EXPLANATION}\nОберіть яке саме ви хотіли б додати '{text}':",
                 reply_markup=create_service_options_keyboard(city, text)
-            )
-            context.user_data['selected_service'] = text
-            return CHOOSING_SERVICE_OPTION
+                )
+                context.user_data['selected_service'] = text
+                return CHOOSING_SERVICE_OPTION
+            else:
+                await update.message.reply_text(
+                    f"Оберіть яке саме ви хотіли б додати '{text}':",
+                    reply_markup=create_service_options_keyboard(city, text)
+                )
+                context.user_data['selected_service'] = text
+                return CHOOSING_SERVICE_OPTION
 
         # --- Якщо вибрано просту послугу ---
         if city in ADDITIONAL_SERVICES_SINGLE:
@@ -2210,7 +2218,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     elif text.strip().startswith(option.strip()):
                         found = True
                     if found:
-                        if service == "🎁 Єкспрес привітання" or "ДЕКОР" in service.upper() or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
+                        if service == "🎁 Експрес привітання" or "ДЕКОР" in service.upper() or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
                             if service not in context.user_data['additional_services']:
