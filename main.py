@@ -9,13 +9,14 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS, LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,PAKET_OPIS, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
 import telegram.ext._updater as _updater_module
 import pandas as pd
 from io import BytesIO
+
 
 # --- ФУНКЦІЯ УНІФІКАЦІЇ КОРИСТУВАЧА ---
 def get_unified_user_info(user, old_user=None, update=None, chat=None, phone=None):
@@ -91,6 +92,8 @@ ADDITIONAL_SERVICES_BUTTON = "➕ Додаткові послуги"
 
 # Додаємо нову константу для кнопки показу вибраних послуг
 SHOW_SELECTED_SERVICES_BUTTON = "📋 Показати вибрані послуги"
+
+
 
 # ============================================
 # ФУНКЦІЇ ДЛЯ РОБОТИ З ВИБОРАМИ КОРИСТУВАЧА
@@ -1695,6 +1698,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         # Отримуємо шлях до фото пакету
         photo_path = PAKET_PHOTOS[city][event_type][text]
+        opis = PAKET_OPIS[city][event_type][text]
         
         # Перевіряємо наявність файлу
         if os.path.exists(photo_path):
@@ -1703,6 +1707,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_photo(
                     photo=photo,
                     caption=f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
+                            f"{opis}\n\n"
                             f"Чудовий вибір! 👍",
                     reply_markup=create_final_keyboard()
                 )
@@ -1711,6 +1716,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.warning(f"Файл не знайдено: {photo_path}")
             await update.message.reply_text(
                 f"🎉 Вибрано пакет: {text}\n💰 Вартість: {price} грн\n\n"
+                f"{opis}\n\n"
                 f"Чудовий вибір! 👍",
                 reply_markup=create_final_keyboard()
             )
@@ -2218,7 +2224,11 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
 
         # --- Якщо вибрано опцію послуги з підменю ---
         if 'selected_service' in context.user_data:
+            
             service = context.user_data['selected_service']
+            option_name = text.rsplit(' - ', 1)[0]  # відрізає останню частину з ціною
+            opis = OPIS_DODATKOVI.get(city, {}).get(service, {}).get(option_name, '')
+            logger.info(f"[ADDITIONAL_SERVICES] Отримано опис опції: {opis}")
             logger.info(f"[ADDITIONAL_SERVICES] Обробка опції для послуги: {service}")
             if city in ADDITIONAL_SERVICES_WITH_SUBMENU and service in ADDITIONAL_SERVICES_WITH_SUBMENU[city]:
                 options = ADDITIONAL_SERVICES_WITH_SUBMENU[city][service]
@@ -2240,6 +2250,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             if text not in context.user_data['additional_services'][service]:
                                 context.user_data['additional_services'][service].append(text)
                             await update.message.reply_text(
+                                f"{opis} \n"
                                 f"{text} для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_service_options_keyboard(city, service)
                             )
@@ -2259,6 +2270,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 context.user_data['additional_services'][service].append(text)
                             desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
                             await update.message.reply_text(
+                                f"{opis} \n"
                                 f"{text} для послуги '{service}' додано до вашого вибору.\n{desc}",
                                 reply_markup=create_service_options_keyboard(city, service)
                             )
@@ -2294,7 +2306,8 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 service_type = "ГЕНЕРАТОР"
                             else:
                                 logger.error(f"[ADDITIONAL_SERVICES] Не знайдено тип послуги '{service}' для міста '{city_key}'")
-                                await update.message.reply_text("Фото для цієї послуги не знайдено (тип)")
+                                await update.message.reply_text("Фото для цієї послуги не знайдено (тип)", 
+                                reply_markup=create_service_options_keyboard(city, service))
                                 return CHOOSING_ADDITIONAL_SERVICES
                         photo_dict = ADDITIONAL_SERVICES_PHOTOS[city_key][service_type]
                         base_name = option_name.split('-')[0].strip().upper()
@@ -2309,13 +2322,15 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 await update.message.reply_photo(
                                     photo=open(photo_path, 'rb'),
-                                    caption=f"{text} для послуги '{service}' додано до вашого вибору.",
+                                    caption=f"{opis} \n"
+                                    f"{text} для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
                             else:
                                 logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує")
                                 await update.message.reply_text(
+                                    f"{opis} \n"
                                     f"{text} для послуги '{service}' додано до вашого вибору.",
                                     reply_markup=create_service_options_keyboard(city, service)
                                 )
@@ -2323,6 +2338,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         else:
                             logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено шлях до фото для опції {option_name}")
                             await update.message.reply_text(
+                                f"{opis} \n"
                                 f"'{text}' для послуги '{service}' додано до вашого вибору.",
                                 reply_markup=create_service_options_keyboard(city, service)
                             )
