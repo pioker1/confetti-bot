@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES, LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS, LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -633,7 +633,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     # Скидаємо стару клавіатуру
     await update.message.reply_text(
-        "Перезапуск меню...",
+        "🎉🎉🎉🎉🎉",
         reply_markup=ReplyKeyboardRemove()
     )
     # Відправляємо привітання з новою клавіатурою
@@ -746,7 +746,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # Зберігаємо вибір типу події тільки для основних подій
             add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
-                "Оберіть місце де хотіли б святкувати:",
+                "Оберіть місце, де хотіли б святкувати:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -1087,7 +1087,7 @@ async def location_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TY
 
         if user_choice == BACK_BUTTON:
             await update.message.reply_text(
-                "Оберіть місце де хотіли б святкувати:",
+                "Оберіть місце, де хотіли б святкувати:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -1180,7 +1180,7 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 )
             else:
                 await update.message.reply_text(
-                    "Оберіть місце де хотіли б святкувати:",
+                    "Оберіть місце, де хотіли б святкувати:",
                     reply_markup=create_location_keyboard(event_type)
                 )
             # Видаляємо значення локації
@@ -1771,6 +1771,20 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         # Зберігаємо вибраний квест та місто
         context.user_data['selected_qwest'] = text
         context.user_data['selected_city'] = city
+        
+        # --- ВИВІД ФОТО ТА ОПИСУ ---
+        photo_path = QWEST_PHOTOS.get(city, {}).get(text)
+        opis = QWEST_OPIS.get(city, {}).get(text, '')
+        if photo_path:
+            try:
+                with open(photo_path, 'rb') as photo:
+                    await update.message.reply_photo(photo, caption=opis if opis else None)
+            except Exception as e:
+                logger.warning(f"[QWEST_PHOTOS] Не вдалося відкрити фото {photo_path}: {str(e)}")
+                await update.message.reply_text(f"Фото для квесту не знайдено. {opis if opis else ''}")
+        else:
+            await update.message.reply_text(f"Фото для квесту не знайдено. {opis if opis else ''}")
+        # --- КІНЕЦЬ ВИВОДУ ФОТО ТА ОПИСУ ---
         
         await update.message.reply_text(
             f"🎮 Вибрано квест: {text}\n\nОберіть тривалість квесту:",
@@ -2732,7 +2746,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return CHOOSING_EVENT_TYPE
     elif last_choice['type'] == "Тип події":
         await update.message.reply_text(
-            "Оберіть місце де хотіли б святкувати:",
+            "Оберіть місце, де хотіли б святкувати:",
             reply_markup=create_location_keyboard(last_choice['value'])
         )
         return CHOOSING_LOCATION
