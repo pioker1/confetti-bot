@@ -699,7 +699,14 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 return CHOOSING_CITY
             foto_load = FOTO_AFISHA[city]
             try:
-                await update.message.reply_photo(open(foto_load, 'rb'))
+                ext = os.path.splitext(foto_load)[1].lower()
+                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+                    await update.message.reply_photo(open(foto_load, 'rb'))
+                elif ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
+                    await update.message.reply_video(open(foto_load, 'rb'))
+                else:
+                    await update.message.reply_document(open(foto_load, 'rb'))  # fallback
+
                 await update.message.reply_text(
                     f"📅 Афіша подій у місті {city}\n"
                     f"{CITY_CHANNELS[city]}",
