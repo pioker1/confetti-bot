@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,PAKET_OPIS, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,service_with_photo,PAKET_OPIS, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -2190,7 +2190,8 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     context.user_data['additional_services'] = {}
                 context.user_data['additional_services'][service_name] = price_text
                 logger.info(f"[ADDITIONAL_SERVICES] Додано просту послугу: {service_name} = {price_text}")
-                if service_name == '🫧 Генератор мильних бульбашок':
+                #Прості послуги з фото
+                if service_name in service_with_photo:
                     city_key = None
                     normalized_city = city.replace('-', '').replace(' ', '').upper()
                     for ck in ADDITIONAL_SERVICES_PHOTOS.keys():
@@ -2249,7 +2250,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     elif text.strip().startswith(option.strip()):
                         found = True
                     if found:
-                        if service == "🎁 Експрес привітання" or "ДЕКОР" in service.upper() or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
+                        if service == "🎁 Експрес привітання" or "ДЕКОР" in service.upper(): # or (city == "Київ" and service in ["🎭 Шоу", "🎨 Майстер-клас"]):
                             if 'additional_services' not in context.user_data:
                                 context.user_data['additional_services'] = {}
                             if service not in context.user_data['additional_services']:
@@ -2265,7 +2266,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                         # --- ДЕКОР та деякі складні послуги: лише текст, без фото ---
                         no_photo_services = []
                         if city == "Київ":
-                            no_photo_services = ["ДЕКОР", "🎭 Шоу", "🎨 Майстер-клас"]
+                            no_photo_services = ["ДЕКОР"]
                         elif city == "Кривий Ріг":
                             no_photo_services = ["ДЕКОР"]
                         if service in no_photo_services:
