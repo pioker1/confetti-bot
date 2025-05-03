@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,service_with_photo,PAKET_OPIS, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,service_with_photo,PAKET_OPIS,MASTER_CLASS_EXPLANATION, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION2, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -2328,10 +2328,17 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             logger.info(f"[ADDITIONAL_SERVICES] Знайдено шлях до фото: {photo_path}")
                             if os.path.exists(photo_path):
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
+                                logger.info(f"[DEBUG] city: '{city}', MASTER_CLASS_EXPLANATION2 keys: {list(MASTER_CLASS_EXPLANATION2.keys())}")
+                                caption = f"{opis} \n{text} для послуги '{service}' додано до вашого вибору."
+                                # Додаємо ціну за майстра для будь-яких варіацій майстер-класу
+                                if (
+                                    (service_type and 'МАЙСТЕР' in service_type.upper())
+                                    or (service and 'МАЙСТЕР' in service.upper())
+                                ):
+                                    caption += f" + ціна за майстра {MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']}"
                                 await update.message.reply_photo(
                                     photo=open(photo_path, 'rb'),
-                                    caption=f"{opis} \n"
-                                    f"{text} для послуги '{service}' додано до вашого вибору.",
+                                    caption=caption,
                                     reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
@@ -2495,73 +2502,77 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         # Додаємо ціни за додаткові послуги
         for service, options in context.user_data['additional_services'].items():
-            # options може бути або рядком (str), або списком (list)
+            # Визначаємо, чи це майстер-клас
+            is_master_class = (
+                'МАЙСТЕР' in service.upper() or 'КЛАС' in service.upper() or '🎨' in service
+            )
             if isinstance(options, list):
                 for option in options:
                     try:
-                        # Підтримка формату: просто число з "грн" (наприклад, "4000 грн")
+                        price = None
+                        # Витягуємо ціну з опції
                         if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
                             price = int(option.strip().split()[0])
-                            total_price += price
-                            summary += f"➕ {service}: {option}\n"
                         elif ' - ' in option:
-                            # Для шоу та інших послуг з форматом "НАЗВА - ЦІНА"
                             price_str = option.split(' - ')[-1]
                             if 'грн' in price_str:
                                 try:
                                     price = int(price_str.split()[0])
-                                    total_price += price
-                                    summary += f"➕ {service}: {option}\n"
                                 except ValueError:
-                                    summary += f"➕ {service}: {option}\n"
-                            else:
-                                summary += f"➕ {service}: {option}\n"
+                                    pass
                         else:
-                            # Для майстер-класів та інших послуг з форматом "НАЗВА - ДЕТАЛІ - ЦІНА"
-                            try:
-                                parts = option.split(' - ')
-                                if len(parts) >= 2:
-                                    price_str = parts[-1]
-                                    if 'грн' in price_str:
+                            parts = option.split(' - ')
+                            if len(parts) >= 2:
+                                price_str = parts[-1]
+                                if 'грн' in price_str:
+                                    try:
                                         price = int(price_str.split()[0])
-                                        total_price += price
-                                summary += f"➕ {service}: {option}\n"
-                            except Exception as e:
-                                logger.error(f"[SUMMARY] Помилка при обробці ціни для {service}: {str(e)}")
-                                summary += f"➕ {service}: {option}\n"
+                                    except ValueError:
+                                        pass
+
+                        # Додаємо ціну за майстра, якщо це майстер-клас
+                        if is_master_class and city in MASTER_CLASS_EXPLANATION2:
+                            master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
+                            total_price += (price if price else 0) + master_price
+                            summary += f"➕ {service}: {option} + Майстер ({master_price} грн)\n"
+                        else:
+                            if price:
+                                total_price += price
+                            summary += f"➕ {service}: {option}\n"
                     except Exception as e:
                         logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
                         summary += f"➕ {service}: {option}\n"
             else:
                 option = options
                 try:
+                    price = None
                     if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
                         price = int(option.strip().split()[0])
-                        total_price += price
-                        summary += f"➕ {service}: {option}\n"
                     elif ' - ' in option:
                         price_str = option.split(' - ')[-1]
                         if 'грн' in price_str:
                             try:
                                 price = int(price_str.split()[0])
-                                total_price += price
-                                summary += f"➕ {service}: {option}\n"
                             except ValueError:
-                                summary += f"➕ {service}: {option}\n"
-                        else:
-                            summary += f"➕ {service}: {option}\n"
+                                pass
                     else:
-                        try:
-                            parts = option.split(' - ')
-                            if len(parts) >= 2:
-                                price_str = parts[-1]
-                                if 'грн' in price_str:
+                        parts = option.split(' - ')
+                        if len(parts) >= 2:
+                            price_str = parts[-1]
+                            if 'грн' in price_str:
+                                try:
                                     price = int(price_str.split()[0])
-                                    total_price += price
-                            summary += f"➕ {service}: {option}\n"
-                        except Exception as e:
-                            logger.error(f"[SUMMARY] Помилка при обробці ціни для {service}: {str(e)}")
-                            summary += f"➕ {service}: {option}\n"
+                                except ValueError:
+                                    pass
+
+                    if is_master_class and city in MASTER_CLASS_EXPLANATION2:
+                        master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
+                        total_price += (price if price else 0) + master_price
+                        summary += f"➕ {service}: {option} + Майстер ({master_price} грн)\n"
+                    else:
+                        if price:
+                            total_price += price
+                        summary += f"➕ {service}: {option}\n"
                 except Exception as e:
                     logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
                     summary += f"➕ {service}: {option}\n"
