@@ -1092,7 +1092,7 @@ ADDITIONAL_SERVICES_WITH_SUBMENU = {
     }
 }
 
-MASTER_CLASS_EXPLANATION={
+MASTER_CLASS_EXPLANATION2={
     'Київ': {
             'МАЙСТЕР': 1000,
             },
