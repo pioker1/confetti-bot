@@ -2340,7 +2340,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             if os.path.exists(photo_path):
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 logger.info(f"[DEBUG] city: '{city}', MASTER_CLASS_EXPLANATION2 keys: {list(MASTER_CLASS_EXPLANATION2.keys())}")
-                                caption = f"{opis} \n{text} для послуги '{service}' додано до вашого вибору"
+                                caption = f"\n\n{opis} \n{text} для послуги '{service}' додано до вашого вибору"
                                 # Додаємо ціну за майстра для будь-яких варіацій майстер-класу
                                 if (
                                     (service_type and 'МАЙСТЕР' in service_type.upper())
@@ -2348,8 +2348,10 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 ):
                                     caption += f" + ціна за майстра {MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']}"
                                 await update.message.reply_photo(
-                                    photo=open(photo_path, 'rb'),
-                                    caption=caption,
+                                    photo=open(photo_path, 'rb')
+                                )
+                                await update.message.reply_text(
+                                    caption,
                                     reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
