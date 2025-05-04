@@ -2148,11 +2148,22 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
             else:
                 message = "🎉 Ваші вибрані додаткові послуги:\n\n"
                 for service, options in context.user_data['additional_services'].items():
+                    is_master_class = (
+                        'МАЙСТЕР' in service.upper() or 'КЛАС' in service.upper() or '🎨' in service
+                    )
                     if isinstance(options, list):
                         for option in options:
-                            message += f"• {service}: {option}\n"
+                            if is_master_class and city in MASTER_CLASS_EXPLANATION2:
+                                master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
+                                message += f"• {service}: {option} + Майстер ({master_price} грн)\n"
+                            else:
+                                message += f"• {service}: {option}\n"
                     else:
-                        message += f"• {service}: {options}\n"
+                        if is_master_class and city in MASTER_CLASS_EXPLANATION2:
+                            master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
+                            message += f"• {service}: {options} + Майстер ({master_price} грн)\n"
+                        else:
+                            message += f"• {service}: {options}\n"
                 message += "\n🚕 Будь ласка, оберіть ваш район для розрахунку вартості таксі:"
                 await update.message.reply_text(
                     message,
@@ -2329,7 +2340,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             if os.path.exists(photo_path):
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 logger.info(f"[DEBUG] city: '{city}', MASTER_CLASS_EXPLANATION2 keys: {list(MASTER_CLASS_EXPLANATION2.keys())}")
-                                caption = f"{opis} \n{text} для послуги '{service}' додано до вашого вибору."
+                                caption = f"{opis} \n{text} для послуги '{service}' додано до вашого вибору"
                                 # Додаємо ціну за майстра для будь-яких варіацій майстер-класу
                                 if (
                                     (service_type and 'МАЙСТЕР' in service_type.upper())
