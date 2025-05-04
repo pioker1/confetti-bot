@@ -2340,7 +2340,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             if os.path.exists(photo_path):
                                 logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                                 logger.info(f"[DEBUG] city: '{city}', MASTER_CLASS_EXPLANATION2 keys: {list(MASTER_CLASS_EXPLANATION2.keys())}")
-                                caption = f"\n\n{opis} \n{text} для послуги '{service}' додано до вашого вибору"
+                                caption = f"{opis} \n\n\n\n{text} для послуги '{service}' додано до вашого вибору"
                                 # Додаємо ціну за майстра для будь-яких варіацій майстер-класу
                                 if (
                                     (service_type and 'МАЙСТЕР' in service_type.upper())
