@@ -207,7 +207,7 @@ class UserData:
             self.users[user_id] = {}
 
     def add_user(self, user_id: int, user_info: dict) -> bool:
-        """Додає нового користувача або оновлює існуючого, не затираючи старі дані"""
+        """Додає нового користувача або оновлює існуючого, не затираючи старі дані та синхронізуючи _id/user_id"""
         try:
             str_id = str(user_id)
             # Оновлюємо лише ті поля, що є у user_info, інші залишаємо
@@ -215,6 +215,9 @@ class UserData:
             old_info.update(user_info)
             # Не перезаписуємо created_at, якщо він вже існує
             old_info['created_at'] = old_info.get('created_at', datetime.now().isoformat())
+            # Синхронізуємо _id та user_id для MongoDB
+            old_info['_id'] = str_id
+            old_info['user_id'] = int(user_id)
             self.users[str_id] = old_info
 
             if self.users_collection is not None and self.ensure_connected():
