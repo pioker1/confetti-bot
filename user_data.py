@@ -207,21 +207,25 @@ class UserData:
             self.users[user_id] = {}
 
     def add_user(self, user_id: int, user_info: dict) -> bool:
-        """Додає нового користувача"""
+        """Додає нового користувача або оновлює існуючого, не затираючи старі дані"""
         try:
             str_id = str(user_id)
-            user_info['created_at'] = datetime.now().isoformat()  # Виправлено: зберігаємо як рядок
-            self.users[str_id] = user_info
-            
+            # Оновлюємо лише ті поля, що є у user_info, інші залишаємо
+            old_info = self.users.get(str_id, {}).copy()
+            old_info.update(user_info)
+            # Не перезаписуємо created_at, якщо він вже існує
+            old_info['created_at'] = old_info.get('created_at', datetime.now().isoformat())
+            self.users[str_id] = old_info
+
             if self.users_collection is not None and self.ensure_connected():
                 self.users_collection.update_one(
                     {'_id': str_id},
-                    {'$set': user_info},
+                    {'$set': old_info},
                     upsert=True
                 )
             else:
                 self.save_data()
-                
+
             logger.info(f"Додано/оновлено користувача: {user_id}")
             return True
         except Exception as e:
