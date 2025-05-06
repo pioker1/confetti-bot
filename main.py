@@ -632,6 +632,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_info = get_unified_user_info(user, old_user, update)
     user_info['visits'] = visits
     user_info['chat_id'] = update.effective_chat.id
+    if not user_info.get('phone_number') and old_phone:
+        user_info['phone_number'] = old_phone
     user_data.add_user(user.id, user_info)
     
     # Скидаємо стару клавіатуру
