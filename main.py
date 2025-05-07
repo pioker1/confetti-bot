@@ -85,13 +85,13 @@ STATE_NAMES = {
 BACK_BUTTON = "⬅️ Назад"
 CONTACT_MANAGER_BUTTON = "📞 Зв'язатися з менеджером"
 SUGGEST_LOCATION_BUTTON = "🗺 Підказати вибір місця проведення"
-WOW_BUTTON = "Вау! 😍"
+WOW_BUTTON = "Так!"
 NEXT_BUTTON = "➡️ Далі"
 DELETE_CHOICE_BUTTON = "🗑 Видалити вибір"
 ADDITIONAL_SERVICES_BUTTON = "➕ Додаткові послуги"
 
 # Додаємо нову константу для кнопки показу вибраних послуг
-SHOW_SELECTED_SERVICES_BUTTON = "📋 Показати вибрані послуги"
+#SHOW_SELECTED_SERVICES_BUTTON = "📋 Показати вибрані послуги"
 
 
 
@@ -417,8 +417,8 @@ def create_additional_services_keyboard(city: str, context: ContextTypes.DEFAULT
                 keyboard.append([KeyboardButton(f"{service} - {price_text}")])
         
         # Додаємо кнопки керування
-        if context and context.user_data.get('additional_services'):
-            keyboard.append([KeyboardButton(SHOW_SELECTED_SERVICES_BUTTON)])
+        #if context and context.user_data.get('additional_services'):
+        #keyboard.append([KeyboardButton(SHOW_SELECTED_SERVICES_BUTTON)])
         keyboard.append([KeyboardButton(NEXT_BUTTON)])
         keyboard.append([KeyboardButton(BACK_BUTTON)])
         
@@ -480,7 +480,7 @@ def create_district_keyboard(city: str) -> ReplyKeyboardMarkup:
 def create_summary_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру для підсумкового меню"""
     keyboard = [
-        [KeyboardButton("📅 Дізнатись час/дату")],
+        [KeyboardButton("📅 Перевірити вільну дату та час для вашого свята🔍")],
         [KeyboardButton(BACK_BUTTON)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -668,7 +668,7 @@ async def city_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     # Показуємо типи подій
     await update.message.reply_text(
-        "Оберіть, яку подію будете святкувати:",
+        "Оберіть, яку подію будете святкувати🥳:",
         reply_markup=create_event_type_keyboard()
     )
     
@@ -758,7 +758,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # Зберігаємо вибір типу події тільки для основних подій
             add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
-                "Оберіть місце, де хотіли б святкувати:",
+                "Оберіть місце, де хотіли б святкувати🎊:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -959,7 +959,7 @@ async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             
             # Відповідь користувачу
             await update.message.reply_text(
-                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                "✅ Ваше замовлення надіслано менеджеру! 📞 Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку: ☎️",
                 reply_markup=ReplyKeyboardMarkup([
                     [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
                     [KeyboardButton('⬅️ На початок')]
@@ -994,7 +994,7 @@ async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT
         remove_choice_by_type(context, 'Тип події')
         remove_choice_by_type(context, 'Місто')
         await update.message.reply_text(
-            "Оберіть тип події знову:",
+            "🔄 Оберіть тип події знову! 🎈",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
@@ -1030,7 +1030,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             remove_choice_by_type(context, 'Локація')
             remove_choice_by_type(context, 'Тип події')
             await update.message.reply_text(
-                "Оберіть яку подію будете святкувати:",
+                "Оберіть, яку подію будете святкувати🥳:",
                 reply_markup=create_event_type_keyboard()
             )
             return CHOOSING_EVENT_TYPE
@@ -1043,7 +1043,7 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [KeyboardButton(BACK_BUTTON)]
             ]
             await update.message.reply_text(
-                "Чим саме я можу вам допомогти?",
+                "Чим саме я можу вам допомогти? 📚",
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
             return CHOOSING_LOCATION_inshe
@@ -1099,7 +1099,7 @@ async def location_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TY
 
         if user_choice == BACK_BUTTON:
             await update.message.reply_text(
-                "Оберіть місце, де хотіли б святкувати:",
+                "Оберіть місце, де хотіли б святкувати🎊:",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -1187,12 +1187,12 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                                 if choice['type'] == "Локація"), None)
             if last_location:
                 await update.message.reply_text(
-                    "Оберіть місце де хотіли б святкувати:",
+                    "Оберіть місце, де хотіли б святкувати🎊:",
                     reply_markup=create_location_keyboard(event_type)
                 )
             else:
                 await update.message.reply_text(
-                    "Оберіть місце, де хотіли б святкувати:",
+                    "Оберіть місце, де хотіли б святкувати🎊:",
                     reply_markup=create_location_keyboard(event_type)
                 )
             # Видаляємо значення локації
@@ -1228,7 +1228,7 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         # Відправляємо інформацію про тематику та показуємо підтеми
         theme_info = THEME_INFO.get(theme, "")
         await update.message.reply_text(
-            f"Ви обрали тематику: {theme}\n\n{theme_info}\n\nОберіть конкретну тематику:",
+            f"🎉 Ви обрали тематику: {theme} 🎨\n\n{theme_info}\n\n👇 Оберіть конкретну тематику для незабутнього свята! 🥳",
             reply_markup=create_theme2_keyboard(theme, city)
         )
         return CHOOSING_THEME2
@@ -1304,13 +1304,13 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 with open(photo_url, 'rb') as photo:
                     await update.message.reply_photo(
                         photo=photo,
-                        caption=f"\nЧудовий вибір! \nОберіть:",
+                        caption=f"\n🎉 Чудовий вибір! 😍\nОберіть далі:",
                         reply_markup=create_theme_details_keyboard()
                     )
             else:
                 await update.message.reply_photo(
                     photo=photo_url,
-                    caption=f"\nЧудовий вибір! \nОберіть:",
+                    caption=f"\nЧудовий вибір! 🌟\n👇 Оберіть далі:",
                     reply_markup=create_theme_details_keyboard()
                 )
         else:
@@ -1481,8 +1481,8 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             if (event_type == "🎓 Випускний") or (event_type == "🎓 Випускний" and is_tourbase):
                 
                 await update.message.reply_text(
-                    "Для цього типу події погодинні ціни узгоджуються з менеджером окремо. \n\n"
-                    "Будь ласка, зв'яжіться з менеджером для отримання детальної інформації.",
+                    "⚠️ Для цього типу події погодинні ціни узгоджуються з менеджером окремо. \n\n"
+                    "📞 Будь ласка, зв'яжіться з менеджером для отримання детальної інформації. 😊",
                     reply_markup=create_vipusk_pogodinno_keyboard()
                 )
                 return VIPUSK_POGODINNO
@@ -1536,7 +1536,7 @@ async def vipusk_pogodinno_chosen (update: Update, context: ContextTypes.DEFAULT
         if text == BACK_BUTTON:
             # Повертаємося до вибору формату
             await update.message.reply_text(
-                "Оберіть формат свята:",
+                "✨ Оберіть формат свята: 👇",
                 reply_markup=create_format_keyboard()
             )
             return CHOOSING_FORMAT
@@ -1546,7 +1546,7 @@ async def vipusk_pogodinno_chosen (update: Update, context: ContextTypes.DEFAULT
             await send_summary_to_manager(update, context)
             # 2. Показати користувачу повідомлення про успішне надсилання
             await update.message.reply_text(
-                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                "✅ Ваше замовлення надіслано менеджеру! 📞 Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку: ☎️",
                 reply_markup=ReplyKeyboardMarkup([
                     [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
                     [KeyboardButton('⬅️ На початок')]
@@ -1600,7 +1600,7 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
         if text == BACK_BUTTON:
             # Повертаємося до вибору формату
             await update.message.reply_text(
-                "Оберіть формат свята:",
+                "✨ Оберіть формат свята! 👇",
                 reply_markup=create_format_keyboard()
             )
             return CHOOSING_FORMAT
@@ -1641,7 +1641,7 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             # Показуємо фінальне меню формату   
             await update.message.reply_text(
-                "Чи сподобався вам цей варіант?",
+                "Додати цей варіант до прорахунку?",
                 reply_markup=create_final_keyboard()
             )
             return CHOOSING_FINAL
@@ -1665,7 +1665,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         remove_choice_by_type(context, 'Формат')
         remove_choice_by_type(context, 'Пакет')
         await update.message.reply_text(
-            "Оберіть формат свята:",
+            "🎉 Оберіть формат свята: 👇",
             reply_markup=create_format_keyboard()
         )
         return CHOOSING_FORMAT
@@ -1732,7 +1732,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
         # Показуємо фінальне меню
         await update.message.reply_text(
-            "Чи сподобався вам цей варіант?",
+            "Додати цей варіант до прорахунку? 📝✨",
             reply_markup=create_final_keyboard()
         )
         return CHOOSING_FINAL
@@ -1759,7 +1759,7 @@ async def qwest_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 del context.user_data['selected_qwest']
             # Повертаємося до вибору формату
             await update.message.reply_text(
-                "Оберіть формат свята:",
+                "🎉 Оберіть формат свята: 👇",
                 reply_markup=create_format_keyboard()
             )
             return CHOOSING_FORMAT
@@ -1878,7 +1878,7 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             
         # Показуємо фінальне меню
         await update.message.reply_text(
-            "Чи сподобався вам цей варіант?",
+            "Додати цей варіант до прорахунку?",
             reply_markup=create_final_keyboard()
         )
         return CHOOSING_FINAL
@@ -1986,7 +1986,7 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             context.user_data['selected_city'] = city
             
         await update.message.reply_text(
-            "Оберіть додаткові послуги:",
+            "✨ Оберіть додаткові послуги: 🎁",
             reply_markup=create_additional_services_keyboard(city, context)
         )
         return CHOOSING_ADDITIONAL_SERVICES
@@ -2022,7 +2022,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 logger.info("Виходимо з режиму видалення послуг")
                 del context.user_data['removing_services']
                 await update.message.reply_text(
-                    "Оберіть додаткові послуги:",
+                    "✨ Оберіть додаткові послуги: 🎁",
                     reply_markup=create_additional_services_keyboard(city, context)
                 )
                 return CHOOSING_ADDITIONAL_SERVICES
@@ -2032,7 +2032,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 logger.info(f"Видаляємо вибрану послугу: {context.user_data['selected_service']}")
                 del context.user_data['selected_service']
                 await update.message.reply_text(
-                    "Оберіть додаткові послуги:",
+                    "✨ Оберіть додаткові послуги: 🎁",
                     reply_markup=create_additional_services_keyboard(city, context)
                 )
                 return CHOOSING_ADDITIONAL_SERVICES
@@ -2054,7 +2054,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
             
             if not last_choice:
                 await update.message.reply_text(
-                    "Оберіть формат свята:",
+                    "🎉 Оберіть формат свята: 👇",
                     reply_markup=create_format_keyboard()
                 )
                 return CHOOSING_FORMAT
@@ -2112,14 +2112,14 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 return CHOOSING_HOURLY_PRICE
 
         # --- Показати вибрані послуги ---
-        if text == SHOW_SELECTED_SERVICES_BUTTON:
-            logger.info("Показуємо меню видалення послуг")
-            context.user_data['removing_services'] = True
-            await update.message.reply_text(
-                "Виберіть послугу для видалення:",
-                reply_markup=create_selected_services_keyboard(context, city)
-            )
-            return CHOOSING_ADDITIONAL_SERVICES
+        #if text == SHOW_SELECTED_SERVICES_BUTTON:
+        #    logger.info("Показуємо меню видалення послуг")
+        #    context.user_data['removing_services'] = True
+        #    await update.message.reply_text(
+        #        "Виберіть послугу для видалення:",
+        #        reply_markup=create_selected_services_keyboard(context, city)
+        #    )
+        #    return CHOOSING_ADDITIONAL_SERVICES
 
         # --- Видалення конкретної послуги ---
         if text.startswith("❌ ") and context.user_data.get('removing_services'):
@@ -2178,14 +2178,14 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
             logger.info(f"[MASTER_CLASS_EXPLANATION] Вибрано послугу з підменю: {text}")
             if text == "🎨 Майстер-клас":
                 await update.message.reply_text(
-                f"{MASTER_CLASS_EXPLANATION}\nОберіть яке саме ви хотіли б додати '{text}':",
+                f"{MASTER_CLASS_EXPLANATION}\n👇 Оберіть який '{text}' саме ви хотіли б додати:",
                 reply_markup=create_service_options_keyboard(city, text)
                 )
                 context.user_data['selected_service'] = text
                 return CHOOSING_SERVICE_OPTION
             else:
                 await update.message.reply_text(
-                    f"Оберіть яке саме ви хотіли б додати '{text}':",
+                    f"Оберіть яке саме ви хотіли б додати '{text}': ✨",
                     reply_markup=create_service_options_keyboard(city, text)
                 )
                 context.user_data['selected_service'] = text
@@ -2218,27 +2218,27 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             logger.info(f"[ADDITIONAL_SERVICES] Файл {photo_path} існує")
                             await update.message.reply_photo(
                                 photo=open(photo_path, 'rb'),
-                                caption=f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                                caption=f"Послугу '{service_name}' додано до вашого вибору! 🎁\n💰 Вартість: {price_text}",
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
                         else:
                             logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує або не знайдено")
                             await update.message.reply_text(
-                                f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                                f"Послугу '{service_name}' додано до вашого вибору! 🎁\n💰 Вартість: {price_text}",
                                 reply_markup=create_additional_services_keyboard(city, context)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
                     else:
                         logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено фото для генератора у місті {city}")
                         await update.message.reply_text(
-                            f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                            f"Послугу '{service_name}' додано до вашого вибору! 🎁\n💰 Вартість: {price_text}",
                             reply_markup=create_additional_services_keyboard(city, context)
                         )
                         return CHOOSING_ADDITIONAL_SERVICES
                 # Інші прості послуги — просто текст і return!
                 await update.message.reply_text(
-                    f"Послугу '{service_name}' додано до вашого вибору.\nВартість: {price_text}",
+                    f"Послугу '{service_name}' додано до вашого вибору! 🎁\n💰 Вартість: {price_text}",
                     reply_markup=create_additional_services_keyboard(city, context)
                 )
                 return CHOOSING_ADDITIONAL_SERVICES
@@ -2292,7 +2292,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
                             await update.message.reply_text(
                                 f"{opis} \n"
-                                f"{text} для послуги '{service}' додано до вашого вибору.\n{desc}",
+                                f"{text} для послуги '{service}' додано до вашого вибору! 🎁\n{desc}",
                                 reply_markup=create_service_options_keyboard(city, service)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
@@ -2361,7 +2361,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 logger.warning(f"[ADDITIONAL_SERVICES] Файл {photo_path} не існує")
                                 await update.message.reply_text(
                                     f"{opis} \n"
-                                    f"{text} для послуги '{service}' додано до вашого вибору.",
+                                    f"{text} для послуги '{service}' додано до вашого вибору! 🎁",
                                     reply_markup=create_service_options_keyboard(city, service)
                                 )
                                 return CHOOSING_ADDITIONAL_SERVICES
@@ -2369,7 +2369,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             logger.warning(f"[ADDITIONAL_SERVICES] Не знайдено шлях до фото для опції {option_name}")
                             await update.message.reply_text(
                                 f"{opis} \n"
-                                f"'{text}' для послуги '{service}' додано до вашого вибору.",
+                                f"'{text}' для послуги '{service}' додано до вашого вибору! 🎁",
                                 reply_markup=create_service_options_keyboard(city, service)
                             )
                             return CHOOSING_ADDITIONAL_SERVICES
@@ -2407,7 +2407,7 @@ async def district_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             # Повертаємось до вибору району
             await update.message.reply_text(
-                "Оберіть додаткові послуги:",
+                "✨ Оберіть додаткові послуги: 🎁",
                 reply_markup=create_additional_services_keyboard(city, context)
             )
             return CHOOSING_ADDITIONAL_SERVICES
@@ -2643,17 +2643,17 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             # Повертаємось до вибору району
             await update.message.reply_text(
-                "Оберіть ваш район:",
+                "🏙️ Оберіть ваш район: 🗺️",
                 reply_markup=create_district_keyboard(city)
             )
             return CHOOSING_DISTRICT
             
-        elif text == "📅 Дізнатись час/дату":
+        elif text == "📅 Перевірити вільну дату та час для вашого свята🔍":
             # 1. Надіслати підсумок менеджеру
             await send_summary_to_manager(update, context)
             # 2. Показати користувачу повідомлення про успішне надсилання
             await update.message.reply_text(
-                "Ваше замовлення надіслано менеджеру! Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку:",
+                "✅ Ваше замовлення надіслано менеджеру! 📞 Очікуйте дзвінка або повідомлення. Якщо бажаєте, можете залишити свій номер телефону для зв'язку: ☎️",
                 reply_markup=ReplyKeyboardMarkup([
                     [KeyboardButton('📱 Надіслати номер телефону', request_contact=True)],
                     [KeyboardButton('⬅️ На початок')]
@@ -2719,7 +2719,7 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
             else:
                 logger.error(f"[SUMMARY_CONTACT] Менеджерський чат ID не знайдено для міста: {context.user_data.get('city')}")
             await update.message.reply_text(
-                "Дякуємо! Ваш контакт передано менеджеру. Очікуйте найближчим часом з вами зв'яжуться для уточнення.",
+                "🎉 Дякуємо! Ваш контакт передано менеджеру. Очікуйте на дзвінок або повідомлення для уточнення деталей! 😊",
                 reply_markup=create_city_keyboard()
             )
             # --- ЗБЕРЕЖЕННЯ КОНТАКТУ В БАЗІ ДАНИХ ---
@@ -2790,19 +2790,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Відновлюємо відповідний стан на основі останнього вибору
     if last_choice['type'] == "Місто":
         await update.message.reply_text(
-            "Оберіть, яку подію будете святкувати:",
+            "Оберіть, яку подію будете святкувати🥳:",
             reply_markup=create_event_type_keyboard()
         )
         return CHOOSING_EVENT_TYPE
     elif last_choice['type'] == "Тип події":
         await update.message.reply_text(
-            "Оберіть місце, де хотіли б святкувати:",
+            "Оберіть місце, де хотіли б святкувати🎊:",
             reply_markup=create_location_keyboard(last_choice['value'])
         )
         return CHOOSING_LOCATION
     elif last_choice['type'] == "Формат":
         await update.message.reply_text(
-            "Оберіть тематику свята:",
+            "Оберіть тематику свята! ✨👇",
             reply_markup=create_theme_keyboard()
         )
         return CHOOSING_THEME
