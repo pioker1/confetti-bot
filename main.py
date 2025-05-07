@@ -1228,7 +1228,7 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         # Відправляємо інформацію про тематику та показуємо підтеми
         theme_info = THEME_INFO.get(theme, "")
         await update.message.reply_text(
-            f"🎉 Ви обрали тематику: {theme} 🎨\n\n{theme_info}\n\n👇 Оберіть конкретну тематику для незабутнього свята! 🥳",
+            f"🎉 Ви обрали тематику: {theme}\n\n{theme_info}\n\n👇 Оберіть конкретну тематику для незабутнього свята! 🥳",
             reply_markup=create_theme2_keyboard(theme, city)
         )
         return CHOOSING_THEME2
