@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
     FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
-    LOCATION_PDF_FILES,QWEST_PHOTOS, QWEST_OPIS,service_with_photo,PAKET_OPIS,MASTER_CLASS_EXPLANATION, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION2, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
+    LOCATION_PDF_FILES,QWEST_PHOTOS,THEME_PHOTOS_VIPUSK, QWEST_OPIS,service_with_photo,PAKET_OPIS,MASTER_CLASS_EXPLANATION, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION2, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
 from datetime import datetime
@@ -1293,10 +1293,16 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         # --- Додаємо отримання міста для фото підтеми ---
         city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+        event_type = next((choice['value'] for choice in user_choices if choice['type'] == "Тип події"), None)
         # Отримуємо посилання на фото для підтеми з урахуванням міста
         photo_url = None
         if city:
-            photo_url = THEME_PHOTOS.get(city, {}).get(theme, {}).get(subtheme)
+            if event_type == "🎓 Випускний":
+                photo_url = THEME_PHOTOS_VIPUSK.get(city, {}).get(theme, {}).get(subtheme)
+                logger.info("VIPUSK")
+            else:
+                photo_url = THEME_PHOTOS.get(city, {}).get(theme, {}).get(subtheme)
+                logger.info("NOT VIPUSK")
         
         # Відправляємо фото з описом
         if photo_url:
