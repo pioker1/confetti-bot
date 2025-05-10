@@ -481,6 +481,7 @@ def create_summary_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру для підсумкового меню"""
     keyboard = [
         [KeyboardButton("📅 Перевірити вільну дату та час для вашого свята🔍")],
+        [KeyboardButton("➕✨ Додати ЩЕ")],
         [KeyboardButton(BACK_BUTTON)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -2067,6 +2068,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 
             # Видаляємо останній вибір
             remove_choice_by_type(context, last_choice['type'])
+            remove_choice_by_type(context, 'Район')
             
             # Повертаємося до відповідного стану
             if last_choice['type'] == 'Квест':
@@ -2172,8 +2174,25 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                             message += f"• {service}: {options} + Майстер ({master_price} грн)\n"
                         else:
                             message += f"• {service}: {options}\n"
-                message += "\n🚕 Будь ласка, оберіть ваш район для розрахунку вартості таксі:"
+            message += "\n🚕 Будь ласка, оберіть ваш район для розрахунку вартості таксі:"
+
+            # частина з переходом ДОДАТИ ЩЕ
+            district = next((c['value'] for c in context.user_data.get('choices', []) if c['type'] == 'Район'), None)
+            if district !=None:
+                taxi_price = TAXI_PRICES[city][district]
+                price_text = f"{taxi_price} грн" if isinstance(taxi_price, (int, float)) else taxi_price
                 await update.message.reply_text(
+                    f"🏘 Ви обрали район: {district}\n"
+                    f"🚕 Приблизна вартість таксі в один бік: {price_text}\n"
+                    "Вартість таксі може змінюватись!"
+                )
+                logger.info("НАТИСНУТО ДАЛІ при вибраному районі")
+                # Переходимо до підсумкового меню
+                await show_summary(update, context)
+                return CHOOSING_SUMMARY
+
+            # Далі стандартна
+            await update.message.reply_text(
                     message,
                     reply_markup=create_district_keyboard(city)
                 )
@@ -2666,6 +2685,14 @@ async def summary_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 ], resize_keyboard=True)
             )
             return PHONE_CONTACT
+            
+        elif text == "➕✨ Додати ЩЕ":
+             # Повертаємось до вибору району
+            await update.message.reply_text(
+                "✨ Оберіть додаткові послуги: 🎁",
+                reply_markup=create_additional_services_keyboard(city, context)
+            )
+            return CHOOSING_ADDITIONAL_SERVICES
             
         else:
             await update.message.reply_text(
