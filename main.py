@@ -2541,16 +2541,52 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     summary += f"Погодинна оплата: {price_text}\n"
         
         # Додаємо ціни за додаткові послуги
-        for service, options in context.user_data['additional_services'].items():
-            # Визначаємо, чи це майстер-клас
-            is_master_class = (
-                'МАЙСТЕР' in service.upper() or 'КЛАС' in service.upper() or '🎨' in service
-            )
-            if isinstance(options, list):
-                for option in options:
+        if 'additional_services' in context.user_data and context.user_data['additional_services']:
+            for service, options in context.user_data['additional_services'].items():
+                # Визначаємо, чи це майстер-клас
+                is_master_class = (
+                    'МАЙСТЕР' in service.upper() or 'КЛАС' in service.upper() or '🎨' in service
+                )
+                if isinstance(options, list):
+                    for option in options:
+                        try:
+                            price = None
+                            # Витягуємо ціну з опції
+                            if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
+                                price = int(option.strip().split()[0])
+                            elif ' - ' in option:
+                                price_str = option.split(' - ')[-1]
+                                if 'грн' in price_str:
+                                    try:
+                                        price = int(price_str.split()[0])
+                                    except ValueError:
+                                        pass
+                            else:
+                                parts = option.split(' - ')
+                                if len(parts) >= 2:
+                                    price_str = parts[-1]
+                                    if 'грн' in price_str:
+                                        try:
+                                            price = int(price_str.split()[0])
+                                        except ValueError:
+                                            pass
+
+                            # Додаємо ціну за майстра, якщо це майстер-клас
+                            if is_master_class and city in MASTER_CLASS_EXPLANATION2:
+                                master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
+                                total_price += (price if price else 0) + master_price
+                                summary += f"➕ {service}: {option} + Майстер ({master_price} грн)\n"
+                            else:
+                                if price:
+                                    total_price += price
+                                summary += f"➕ {service}: {option}\n"
+                        except Exception as e:
+                            logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
+                            summary += f"➕ {service}: {option}\n"
+                else:
+                    option = options
                     try:
                         price = None
-                        # Витягуємо ціну з опції
                         if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
                             price = int(option.strip().split()[0])
                         elif ' - ' in option:
@@ -2570,7 +2606,6 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                                     except ValueError:
                                         pass
 
-                        # Додаємо ціну за майстра, якщо це майстер-клас
                         if is_master_class and city in MASTER_CLASS_EXPLANATION2:
                             master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
                             total_price += (price if price else 0) + master_price
@@ -2582,40 +2617,6 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     except Exception as e:
                         logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
                         summary += f"➕ {service}: {option}\n"
-            else:
-                option = options
-                try:
-                    price = None
-                    if option.strip().endswith('грн') and option.strip().replace(' грн', '').replace(' ', '').isdigit():
-                        price = int(option.strip().split()[0])
-                    elif ' - ' in option:
-                        price_str = option.split(' - ')[-1]
-                        if 'грн' in price_str:
-                            try:
-                                price = int(price_str.split()[0])
-                            except ValueError:
-                                pass
-                    else:
-                        parts = option.split(' - ')
-                        if len(parts) >= 2:
-                            price_str = parts[-1]
-                            if 'грн' in price_str:
-                                try:
-                                    price = int(price_str.split()[0])
-                                except ValueError:
-                                    pass
-
-                    if is_master_class and city in MASTER_CLASS_EXPLANATION2:
-                        master_price = MASTER_CLASS_EXPLANATION2[city]['МАЙСТЕР']
-                        total_price += (price if price else 0) + master_price
-                        summary += f"➕ {service}: {option} + Майстер ({master_price} грн)\n"
-                    else:
-                        if price:
-                            total_price += price
-                        summary += f"➕ {service}: {option}\n"
-                except Exception as e:
-                    logger.error(f"[SUMMARY] Помилка при обробці ціни додаткової послуги: {str(e)}")
-                    summary += f"➕ {service}: {option}\n"
         
         # Додаємо вартість таксі
         district = next((choice['value'] for choice in choices if choice['type'] == "Район"), None)
