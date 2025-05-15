@@ -16,6 +16,8 @@ from datetime import datetime
 import telegram.ext._updater as _updater_module
 import pandas as pd
 from io import BytesIO
+import asyncio
+from asyncio import Semaphore
 
 
 # --- ФУНКЦІЯ УНІФІКАЦІЇ КОРИСТУВАЧА ---
@@ -2903,6 +2905,7 @@ from telegram.constants import ChatAction
 
 async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Розсилка повідомлення/файлу всім користувачам (тільки для менеджера)"""
+    
     user_id = update.effective_user.id
     if user_id not in [MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR]:
         await update.message.reply_text("⛔ Доступ заборонено")
@@ -2912,29 +2915,77 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
     msg_text = ' '.join(context.args)
     media_msg = update.message.reply_to_message
-    sent, failed = 0, 0
-    for uid, info in user_data.users.items():
-        chat_id = info.get('chat_id')
-        if not chat_id:
-            continue
-        try:
-            # Відправляємо текст
-            if msg_text.strip():
-                await context.bot.send_message(chat_id=chat_id, text=msg_text, parse_mode='HTML')
-            # Відправляємо медіа з replied повідомлення
-            if media_msg:
-                if media_msg.photo:
-                    await context.bot.send_photo(chat_id=chat_id, photo=media_msg.photo[-1].file_id, caption=msg_text or None)
-                if media_msg.document:
-                    await context.bot.send_document(chat_id=chat_id, document=media_msg.document.file_id, caption=msg_text or None)
-                if media_msg.video:
-                    await context.bot.send_video(chat_id=chat_id, video=media_msg.video.file_id, caption=msg_text or None)
-                if media_msg.audio:
-                    await context.bot.send_audio(chat_id=chat_id, audio=media_msg.audio.file_id, caption=msg_text or None)
-            sent += 1
-        except Exception as e:
-            failed += 1
-    await update.message.reply_text(f'✅ Розіслано: {sent}\n❌ Не вдалося: {failed}')
+
+    # Створюємо семафор для обмеження паралельних запитів
+    semaphore = Semaphore(5)
+
+    async def send_message_to_user(chat_id):
+        async with semaphore:
+            try:
+                # Відправляємо текст
+                if msg_text.strip() and not media_msg:
+                    await context.bot.send_message(chat_id=chat_id, text=msg_text, parse_mode='HTML')
+                
+                # Відправляємо медіа з replied повідомлення
+                if media_msg:
+                    if media_msg.photo:
+                        await context.bot.send_photo(chat_id=chat_id, photo=media_msg.photo[-1].file_id, caption=msg_text or None)
+                    if media_msg.document:
+                        await context.bot.send_document(chat_id=chat_id, document=media_msg.document.file_id, caption=msg_text or None)
+                    if media_msg.video:
+                        await context.bot.send_video(chat_id=chat_id, video=media_msg.video.file_id, caption=msg_text or None)
+                    if media_msg.audio:
+                        await context.bot.send_audio(chat_id=chat_id, audio=media_msg.audio.file_id, caption=msg_text or None)
+                
+                return True
+            except Exception as e:
+                print(f"Помилка надсилання для {chat_id}: {e}")
+                return False
+
+    # Збираємо список чат-айді, виключаючи порожні
+    chat_ids = [info.get('chat_id') for uid, info in user_data.users.items() if info.get('chat_id')]
+    
+    total_sent, total_failed = 0, 0
+    failed_chat_ids = []
+    
+    # Розбиваємо на пакети по 30 користувачів (щоб не перевищити 30 повідомлень/хв)
+    batches = [chat_ids[i:i+30] for i in range(0, len(chat_ids), 30)]
+    
+    for batch_num, batch in enumerate(batches, 1):
+        results = await asyncio.gather(*[send_message_to_user(chat_id) for chat_id in batch])
+        sent = results.count(True)
+        failed = results.count(False)
+        total_sent += sent
+        total_failed += failed
+        
+        # Збираємо невдалі чат-айді
+        failed_chat_ids.extend([batch[i] for i, result in enumerate(results) if not result])
+        
+        # Формуємо проміжне повідомлення
+        interim_message = (
+            f"Пакет {batch_num}/{len(batches)}:\n"
+            f"✅ Розіслано: {sent}\n"
+            f"❌ Не вдалося: {failed}"
+        )
+        await update.message.reply_text(interim_message)
+        
+        # Пауза 60 секунд між пакетами
+        await asyncio.sleep(60)
+    
+    # Фінальне повідомлення
+    final_message = (
+        f"📊 Розсилка завершена:\n"
+        f"✅ Всього розіслано: {total_sent}\n"
+        f"❌ Всього не вдалося: {total_failed}"
+    )
+    
+    # Додаємо список чат-айді, де розсилка не вдалася
+    if failed_chat_ids:
+        final_message += "\n\n❗ Невдалі чат-айді:\n" + "\n".join(map(str, failed_chat_ids[:20]))
+        if len(failed_chat_ids) > 20:
+            final_message += f"\n... та ще {len(failed_chat_ids) - 20}"
+    
+    await update.message.reply_text(final_message)
 
 async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Звернення до конкретного користувача: /hello ID повідомлення (тільки для менеджера)"""
