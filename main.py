@@ -2948,8 +2948,8 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
     total_sent, total_failed = 0, 0
     failed_chat_ids = []
     
-    # Розбиваємо на пакети по 30 користувачів (щоб не перевищити 30 повідомлень/хв)
-    batches = [chat_ids[i:i+30] for i in range(0, len(chat_ids), 30)]
+    # Розбиваємо на пакети по 20 користувачів (щоб не перевищити 20 повідомлень/хв)
+    batches = [chat_ids[i:i+20] for i in range(0, len(chat_ids), 20)]
     
     for batch_num, batch in enumerate(batches, 1):
         results = await asyncio.gather(*[send_message_to_user(chat_id) for chat_id in batch])
@@ -2957,6 +2957,7 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
         failed = results.count(False)
         total_sent += sent
         total_failed += failed
+        
         
         # Збираємо невдалі чат-айді
         failed_chat_ids.extend([batch[i] for i, result in enumerate(results) if not result])
