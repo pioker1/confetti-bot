@@ -8,7 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
     TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
-    FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
+    AFISHA_REESTR,FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
     LOCATION_PDF_FILES,QWEST_PHOTOS,THEME_PHOTOS_VIPUSK, QWEST_OPIS,service_with_photo,PAKET_OPIS,MASTER_CLASS_EXPLANATION, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION2, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
 from user_data import user_data
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 # КОНСТАНТИ ТА СТАНИ
 # ============================================
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE,VIPUSK_POGODINNO, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(23)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha,CHOOSING_EVENT_TYPE_afisha_reestr, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE,VIPUSK_POGODINNO, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(24)
 
 STATE_NAMES = {
     CHOOSING_CITY: 'CHOOSING_CITY',
@@ -65,6 +65,7 @@ STATE_NAMES = {
     FFMILY_DOP: 'FFMILY_DOP',
     CHOOSING_EVENT_TYPE_inshe: 'CHOOSING_EVENT_TYPE_inshe',
     CHOOSING_EVENT_TYPE_afisha: 'CHOOSING_EVENT_TYPE_afisha',
+    CHOOSING_EVENT_TYPE_afisha_reestr: 'CHOOSING_EVENT_TYPE_afisha_reestr',
     CHOOSING_LOCATION: 'CHOOSING_LOCATION',
     CHOOSING_LOCATION_inshe: 'CHOOSING_LOCATION_inshe',
     CHOOSING_THEME: 'CHOOSING_THEME',
@@ -91,6 +92,7 @@ WOW_BUTTON = "Так!"
 NEXT_BUTTON = "➡️ Далі"
 DELETE_CHOICE_BUTTON = "🗑 Видалити вибір"
 ADDITIONAL_SERVICES_BUTTON = "➕ Додаткові послуги"
+REESTR = "Реєстрація 📝"
 
 # Додаємо нову константу для кнопки показу вибраних послуг
 #SHOW_SELECTED_SERVICES_BUTTON = "📋 Показати вибрані послуги"
@@ -173,6 +175,16 @@ def create_event_type_keyboard() -> ReplyKeyboardMarkup:
         keyboard.append(row)
     keyboard.append([KeyboardButton(BACK_BUTTON)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def create_event_type_keyboard_afisha() -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з типами подій"""
+    keyboard = [
+        [KeyboardButton(REESTR)],
+        [KeyboardButton(BACK_BUTTON)]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
 
 def create_theme_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з тематиками свят"""
@@ -715,9 +727,9 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 await update.message.reply_text(
                     f"📅 Афіша подій у місті {city}\n"
                     f"{CITY_CHANNELS[city]}",
-                    reply_markup=create_event_type_keyboard()
+                    reply_markup=create_event_type_keyboard_afisha()
                 )
-                return CHOOSING_EVENT_TYPE
+                return CHOOSING_EVENT_TYPE_afisha
             except Exception as e:
                 logger.error(f"Фото з афіші прибрано: {str(e)}")
                 await update.message.reply_text(
@@ -785,6 +797,105 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return CHOOSING_EVENT_TYPE
 
+async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка вибору типу події для інших подій"""
+    try:
+        text = update.message.text
+        event_type = update.message.text
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                    if choice['type'] == "Місто"), None)
+
+        if text == REESTR:
+            await update.message.reply_text(
+                AFISHA_REESTR[city],
+                reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
+            )
+            return CHOOSING_EVENT_TYPE_afisha_reestr
+            
+        
+        if text == BACK_BUTTON:
+            await update.message.reply_text(
+                "Оберіть тип події! 🎈",
+                reply_markup=create_event_type_keyboard()
+            )
+            return CHOOSING_EVENT_TYPE    
+        
+    except Exception as e:
+        logger.error(f"Помилка при обробці вибору типу події: {str(e)}")
+        await update.message.reply_text(
+            "Виникла помилка. Будь ласка, спробуйте ще раз.",
+            reply_markup=create_event_type_keyboard_afisha()
+        )
+        return CHOOSING_EVENT_TYPE_afisha
+
+async def event_type_chosen_afisha_reestr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка вибору типу події для інших подій"""
+    try:
+        text = update.message.text
+        event_type = update.message.text
+        city = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                    if choice['type'] == "Місто"), None)
+
+        if text == BACK_BUTTON:
+            foto_load = FOTO_AFISHA[city]
+            try:
+                ext = os.path.splitext(foto_load)[1].lower()
+                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+                    await update.message.reply_photo(open(foto_load, 'rb'))
+                elif ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
+                    await update.message.reply_video(open(foto_load, 'rb'))
+                else:
+                    await update.message.reply_document(open(foto_load, 'rb'))  # fallback
+
+                await update.message.reply_text(
+                    f"📅 Афіша подій у місті {city}\n"
+                    f"{CITY_CHANNELS[city]}",
+                    reply_markup=create_event_type_keyboard_afisha()
+                )
+                return CHOOSING_EVENT_TYPE_afisha
+            except Exception as e:
+                logger.error(f"Фото з афіші прибрано: {str(e)}")
+                await update.message.reply_text(
+                    f"Чекайте на оновлення подій в місті {city}",
+                    reply_markup=create_event_type_keyboard()
+                )
+                return CHOOSING_EVENT_TYPE
+        # Якщо це не BACK_BUTTON, вважаємо що це реєстраційна інформація
+        user = update.effective_user
+        manager_chat_id = None
+        if city == "Київ":
+            manager_chat_id = MANAGER_CHAT_ID_KIEV
+        elif city == "Кривий Ріг":
+            manager_chat_id = MANAGER_CHAT_ID_KR
+        else:
+            manager_chat_id = MANAGER_CHAT_ID_KIEV  # дефолт
+
+        # Формуємо повідомлення для менеджера
+        manager_message = (
+            f"НОВА РЕЄСТРАЦІЯ НА АФІШУ ({city})\n"
+            f"Від користувача: {user.full_name} (@{user.username or 'немає'})\n"
+            f"User ID: {user.id}\n\n"
+            f"Дані для реєстрації:\n{text}"
+        )
+
+        # Надсилаємо менеджеру
+        await context.bot.send_message(chat_id=manager_chat_id, text=manager_message)
+
+        # Підтвердження користувачу
+        await update.message.reply_text(
+            "✅ Дякуємо! Ваші дані прийняті.",
+            reply_markup=create_event_type_keyboard()
+            )
+        return CHOOSING_EVENT_TYPE
+
+    except Exception as e:
+        logger.error(f"Помилка при обробці вибору типу події: {str(e)}")
+        await update.message.reply_text(
+            "Виникла помилка. Будь ласка, спробуйте ще раз.",
+            reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
+        )
+        return CHOOSING_EVENT_TYPE_afisha_reestr
+
 async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору в першому рівні розділу 'Інше'"""
     try:
@@ -845,6 +956,8 @@ async def event_type_chosen_inshe(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=create_other_keyboard()
         )
         return CHOOSING_EVENT_TYPE_inshe
+
+
 
 async def event_type_chosen__Sim_svjata(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору типу події для святкових подій"""
@@ -989,18 +1102,7 @@ async def family_dop_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
     
-async def event_type_chosen_afisha(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обробка вибору типу події для інших подій"""
-    text = update.message.text
-    
-    if text == BACK_BUTTON:
-        remove_choice_by_type(context, 'Тип події')
-        remove_choice_by_type(context, 'Місто')
-        await update.message.reply_text(
-            "🔄 Оберіть тип події знову! 🎈",
-            reply_markup=create_event_type_keyboard()
-        )
-        return CHOOSING_EVENT_TYPE
+
     
 async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробка вибору локації"""
@@ -3080,6 +3182,7 @@ def main():
             FFMILY_DOP: [MessageHandler(filters.TEXT & ~filters.COMMAND, family_dop_chosen)],
             CHOOSING_EVENT_TYPE_inshe: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen_inshe)],
             CHOOSING_EVENT_TYPE_afisha: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen_afisha)],
+            CHOOSING_EVENT_TYPE_afisha_reestr: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_type_chosen_afisha_reestr)],
             CHOOSING_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen)],
             CHOOSING_LOCATION_inshe: [MessageHandler(filters.TEXT & ~filters.COMMAND, location_chosen_inshe)],
             CHOOSING_THEME: [MessageHandler(filters.TEXT & ~filters.COMMAND, theme_chosen)],
