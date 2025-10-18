@@ -97,7 +97,7 @@ CITY_CHANNELS = {
 FOTO_AFISHA = {
     'Київ': 'матеріали/images/Афіша/',
     'Кривий Ріг': (
-    'матеріали/images/Афіша/хелловін1.jpg,
+    'матеріали/images/Афіша/хелловін1.jpg',
     'матеріали/images/Афіша/хелловін2.jpg'
     )
 }
@@ -1487,6 +1487,7 @@ TAXI_PRICES = {
 MASTER_CLASS_EXPLANATION = (
     " "
 )
+
 
 
 
