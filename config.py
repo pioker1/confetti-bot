@@ -76,8 +76,8 @@ CITY_CHANNELS = {
         "🎃 Дякуємо, що були з нами на нашій неймовірній вечірці Хелловін!\n"
         "Було страшенно весело й круто — завдяки вам 🧡\n\n"
         "👉 Фото з вечірок можна переглянути за посиланнями:\n"
-        "📸 1.11.25 — посилання\n"
-        "📸 2.11.25 — посилання\n\n"
+        "📸 1.11.25 — https://drive.google.com/drive/folders/17-NJxfYRiwOQuUKDXyQxAKdyajtl85KA?usp=drive_link\n"
+        "📸 2.11.25 — https://drive.google.com/drive/folders/1nGrXLXyu5Aa_qe1oJVg3G36AiPGzxPVJ?usp=drive_link\n\n"
         "До нових святкових зустрічей! ✨"
     )
 }
@@ -85,7 +85,7 @@ CITY_CHANNELS = {
 #ПОСИЛАННЯ НА ФОТО/відео Афіши
 FOTO_AFISHA = {
     'Київ': 'матеріали/images/Афіша/',
-    'Кривий Ріг':'матеріали/images/Афіша/хелловін2.jpg'
+    'Кривий Ріг':'матеріали/images/Афіша/хелловін1.jpg'
 }
 
 #Данні ДЛЯ РЕЄСТРУВАННЯ
@@ -1473,6 +1473,7 @@ TAXI_PRICES = {
 MASTER_CLASS_EXPLANATION = (
     " "
 )
+
 
 
 
