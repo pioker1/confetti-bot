@@ -7,7 +7,7 @@ import re
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from config import (
-    TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,
+    TELEGRAM_BOT_TOKEN, CITIES, EVENT_TYPES_LIST,THEMES_NG, EVENT_FORMATS_NG, NG_31_12_PRICES,
     AFISHA_REESTR,FOTO_AFISHA,CITY_CHANNELS, GENERAL_INFO, MANAGER_INFO, MANAGER_CONTACT_MESSAGES, MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR,
     LOCATION_PDF_FILES,QWEST_PHOTOS,THEME_PHOTOS_VIPUSK, QWEST_OPIS,service_with_photo,PAKET_OPIS,MASTER_CLASS_EXPLANATION, OPIS_DODATKOVI,LOCATIONS,MASTER_CLASS_EXPLANATION2, LOCATION_INFO, THEMES, MANAGER_ERROR,THEME_INFO, THEME_BTN, Hello_World, THEME_PHOTOS, EVENT_FORMATS, HOURLY_PRICES, PAKET_PRICES, PAKET_PHOTOS, QWEST, ADDITIONAL_SERVICES_WITH_SUBMENU, ADDITIONAL_SERVICES_SINGLE, ADDITIONAL_SERVICES_PHOTOS, TAXI_PRICES, FAMILY_INFO, FAMILY_INFO_INFO2, FAMALY_TRIP
 )
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 # КОНСТАНТИ ТА СТАНИ
 # ============================================
 # Стани розмови
-CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha,CHOOSING_EVENT_TYPE_afisha_reestr, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE,VIPUSK_POGODINNO, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP = range(24)
+CHOOSING_CITY, CHOOSING_EVENT_TYPE, CHOOSING_EVENT_TYPE_Sim_svjata, CHOOSING_EVENT_TYPE_inshe, CHOOSING_EVENT_TYPE_afisha,CHOOSING_EVENT_TYPE_afisha_reestr, CHOOSING_LOCATION, CHOOSING_LOCATION_inshe, CHOOSING_THEME, CHOOSING_THEME2, CHOOSING_THEME_DETAILS, CHOOSING_FORMAT, CHOOSING_HOURLY_PRICE,VIPUSK_POGODINNO, CHOOSING_PACKAGE, CHOOSING_QWEST, CHOOSING_QWEST_DURATION, CHOOSING_FINAL, CHOOSING_ADDITIONAL_SERVICES, CHOOSING_SERVICE_OPTION, CHOOSING_DISTRICT, CHOOSING_SUMMARY,PHONE_CONTACT, FFMILY_DOP,PRIVITANJA_31_12 = range(25)
 
 STATE_NAMES = {
     CHOOSING_CITY: 'CHOOSING_CITY',
@@ -81,7 +81,8 @@ STATE_NAMES = {
     CHOOSING_SERVICE_OPTION: 'CHOOSING_SERVICE_OPTION',
     CHOOSING_DISTRICT: 'CHOOSING_DISTRICT',
     CHOOSING_SUMMARY: 'CHOOSING_SUMMARY',
-    PHONE_CONTACT: 'PHONE_CONTACT'
+    PHONE_CONTACT: 'PHONE_CONTACT',
+    PRIVITANJA_31_12: 'PRIVITANJA_31_12'
 }
 
 # Кнопки
@@ -160,6 +161,34 @@ def add_choice(context: ContextTypes.DEFAULT_TYPE, choice_type: str, value: str)
 # ============================================
 # ФУНКЦІЇ ДЛЯ СТВОРЕННЯ КЛАВІАТУР
 # ============================================
+
+def create_theam_privitanja31(city: str, event_type: str) -> ReplyKeyboardMarkup:
+    """Створює клавіатуру з доступними темами для Нового Року 31 числа"""
+    try:
+        keyboard = []
+        # Отримуємо ціни для вибраного міста та типу події
+        prices = NG_31_12_PRICES[city][event_type]
+        # Додаємо кнопки з цінами
+        for price_name, price_value in prices.items():
+            keyboard.append([KeyboardButton(f"{price_name}: {price_value} грн")])
+        keyboard.append([KeyboardButton(BACK_BUTTON)])
+        return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    except Exception as e:
+        logger.error(f"Помилка при створенні клавіатури погодинних цін: {str(e)}")
+        logger.error(f"city: {city}, event_type: {event_type}")
+        # Повертаємо просту клавіатуру з кнопкою "Назад" у випадку помилки
+        return ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
+    
+    keyboard = [ [KeyboardButton(location)] for location in NG_31_12_PRICES]
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+def create_theam_keyboard_Noviy_Rik():
+    """Створює клавіатуру з доступними темами для Нового Року"""
+    keyboard = [ [KeyboardButton(location)] for location in THEMES_NG]
+    keyboard.append([KeyboardButton(BACK_BUTTON)])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
 def create_city_keyboard() -> ReplyKeyboardMarkup:
     """Створює клавіатуру з доступними містами"""
     keyboard = [[KeyboardButton(city)] for city in CITIES]
@@ -304,6 +333,26 @@ def create_format_keyboard() -> ReplyKeyboardMarkup:
         logger.error(f"Помилка при створенні клавіатури форматів: {str(e)}")
         # Повертаємо просту клавіатуру з кнопкою "Назад" у випадку помилки
         return ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
+
+def create_format_keyboard_NG(theme: str) -> ReplyKeyboardMarkup:
+    """Створює клавіатуру для вибору формату свята"""
+    try:
+        # Створюємо клавіатуру з форматами
+        keyboard = []
+        for format_name in EVENT_FORMATS_NG.keys():
+            if theme == "🎅👼 Святий Миколай та Янгол" and format_name == '🎆 Привітання 31.12':
+                continue  # Пропускаємо цей формат
+            else:
+                keyboard.append([KeyboardButton(format_name)])
+        
+        # Додаємо кнопку "Назад"
+        keyboard.append([KeyboardButton(BACK_BUTTON)])
+        
+        return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    except Exception as e:
+        logger.error(f"Помилка при створенні клавіатури форматів: {str(e)}")
+        # Повертаємо просту клавіатуру з кнопкою "Назад" у випадку помилки
+        return ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
             
 
 def create_hourly_price_keyboard(city: str, event_type: str) -> ReplyKeyboardMarkup:
@@ -327,6 +376,7 @@ def create_hourly_price_keyboard(city: str, event_type: str) -> ReplyKeyboardMar
         return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     except Exception as e:
         logger.error(f"Помилка при створенні клавіатури погодинних цін: {str(e)}")
+        logger.error(f"city: {city}, event_type: {event_type}")
         # Повертаємо просту клавіатуру з кнопкою "Назад" у випадку помилки
         return ReplyKeyboardMarkup([[KeyboardButton(BACK_BUTTON)]], resize_keyboard=True)
 
@@ -769,7 +819,7 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return CHOOSING_EVENT_TYPE_Sim_svjata
         
         # Для Дня народження та Випускного показуємо вибір локації
-        elif '🎂 День народження' in event_type or '🎓 Випускний' in event_type:
+        elif '🎂 День народження' in event_type or '🎓 Випускний' in event_type or '🎄 Новий рік' in event_type:
             # Зберігаємо вибір типу події тільки для основних подій
             add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
@@ -1153,6 +1203,18 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return CHOOSING_LOCATION_inshe
 
+        location_info = LOCATION_INFO.get(city, {}).get(location, "Вибрана локація")
+        event_type = next((choice['value'] for choice in context.user_data.get('choices', []) 
+                          if choice['type'] == "Тип події"), None)
+        if event_type == "🎄 Новий рік":
+             # Зберігаємо вибір локації
+            add_choice(context, "Локація", location)
+            await update.message.reply_text(
+                f"Ви обрали локацію: {location}\n\n{location_info}\n\nТепер оберіть тематику свята:",
+                reply_markup=create_theam_keyboard_Noviy_Rik()
+            )
+            return CHOOSING_THEME
+
         # Перевіряємо чи вибрана локація доступна для даного типу події
         available_locations = LOCATIONS.get(event_type, [])
         if not available_locations:
@@ -1266,6 +1328,9 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         # Отримуємо всі збережені вибори користувача
         user_choices = context.user_data.get('choices', [])
         logger.info(f"Поточні вибори користувача: {user_choices}")
+        theam_chois = next((choice['value'] for choice in reversed(user_choices) 
+                                if choice['type'] == "Тип події"), None)
+        
         
         # Знаходимо останній збережений тип події та місто
         event_type = None
@@ -1312,6 +1377,13 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 name=manager['name'],
                 telegram=manager['telegram']
             )
+           
+            if theam_chois=="🎄 Новий рік":
+                await update.message.reply_text(
+                message,
+                reply_markup=create_theam_keyboard_Noviy_Rik()
+            )
+                return CHOOSING_THEME
             await update.message.reply_text(
                 message,
                 reply_markup=create_theme_keyboard()
@@ -1319,7 +1391,12 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             return CHOOSING_THEME
 
         # Перевіряємо чи вибрана тематика доступна
-        if theme not in THEMES:
+        if (theme not in THEMES) and (theme not in THEMES_NG):
+            logger.warning(
+                f"[THEME_CHECK] Відхилено тему='{theme}'. "
+                f"in_THEMES={theme in THEMES}, in_THEMES_NG={theme in THEMES_NG}. "
+                f"Подивіться THEMES[:10]={THEMES[:10]} THEMES_NG={THEMES_NG}"
+            )
             await update.message.reply_text(
                 "Будь ласка, оберіть тематику зі списку:",
                 reply_markup=create_theme_keyboard()
@@ -1328,8 +1405,46 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
         # Зберігаємо вибір тематики (замість додавання ще однієї, видаляємо попередню)
         remove_choice_by_type(context, "Тематика")
-        add_choice(context, "Тематика", theme)
+        remove_choice_by_type(context, "Підтема")
+        add_choice(context,"Тематика", theme)
         
+        
+        #Якщо новий рік, проскакуємо підтеми
+        if theam_chois=="🎄 Новий рік":
+            add_choice(context, "Підтема", '🎄 Новий рік')
+            logger.info(f"Дісталось до перевірки нового року і додали підтему, тематику і тип події 🎄 Новий рік")
+            theme_info = THEME_INFO.get(theme, "")
+
+            #Видаємо фото і клавіатуру деталей
+            # --- Додаємо отримання міста для фото підтеми ---
+            city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+            event_type = next((choice['value'] for choice in user_choices if choice['type'] == "Тип події"), None)
+            # Отримуємо посилання на фото
+            photo_url = THEME_PHOTOS.get(city, {}).get('🎄 Новий рік', {}).get(theme)
+                    
+        
+            # Відправляємо фото з описом
+            if photo_url:
+                if os.path.exists(photo_url):
+                    with open(photo_url, 'rb') as photo:
+                        await update.message.reply_photo(
+                            photo=photo,
+                            caption=f"\n🎉 Чудовий вибір! 😍\nОберіть далі:",
+                            reply_markup=create_theme_details_keyboard()
+                        )
+                else:
+                    await update.message.reply_photo(
+                        photo=photo_url,
+                        caption=f"\nЧудовий вибір! 🌟\n👇 Оберіть далі:",
+                        reply_markup=create_theme_details_keyboard()
+                    )
+            else:
+                await update.message.reply_text(
+                     f"🎉 Ви обрали тематику: {theme}\n\n{theme_info}\n\n👇 Оберіть конкретну тематику для незабутнього свята! 🥳",
+                    reply_markup=create_theme_details_keyboard()
+                )
+            return CHOOSING_THEME_DETAILS
+
         # Відправляємо інформацію про тематику та показуємо підтеми
         theme_info = THEME_INFO.get(theme, "")
         await update.message.reply_text(
@@ -1410,6 +1525,7 @@ async def theme2_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 logger.info("NOT VIPUSK")
         
         # Відправляємо фото з описом
+        logger.info(f"Отримане посилання на фото для підтеми '{subtheme}': {photo_url}")
         if photo_url:
             if os.path.exists(photo_url):
                 with open(photo_url, 'rb') as photo:
@@ -1454,6 +1570,8 @@ async def theme_details_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
                      if choice['type'] == "Тематика"), None)
         subtheme = next((choice['value'] for choice in reversed(user_choices) 
                         if choice['type'] == "Підтема"), None)
+        typ_podii = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тип події"), None)
         
         if not theme:
             logger.error("Тематика не знайдена в виборах користувача")
@@ -1471,6 +1589,8 @@ async def theme_details_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
             # Знаходимо тему знову
             theme = next((choice['value'] for choice in reversed(user_choices) 
                          if choice['type'] == "Тематика"), None)
+            typ_podii = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тип події"), None)
             
             city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
             if not city:
@@ -1480,6 +1600,14 @@ async def theme_details_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
                     reply_markup=create_city_keyboard()
                 )
                 return CHOOSING_CITY
+            logger.info(f'Перевіряємо чи працює коректно backButton: typ_podii={typ_podii}')
+            if typ_podii == "🎄 Новий рік":
+                await update.message.reply_text(
+                "Оберіть конкретну тематику:",
+                reply_markup=create_theam_keyboard_Noviy_Rik()
+            )
+                return CHOOSING_THEME
+
             await update.message.reply_text(
                 "Оберіть конкретну тематику:",
                 reply_markup=create_theme2_keyboard(theme, city)
@@ -1487,12 +1615,20 @@ async def theme_details_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
             return CHOOSING_THEME2
         
         if choice == "💰 Ціни":
-            # Відправляємо повідомлення про недоступність цін
-            await update.message.reply_text(
+            if typ_podii == "🎄 Новий рік":
+                theme = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тематика"), None)
+                await update.message.reply_text(
                 "💰 Оберіть формат святкування та дізнайтесь ціни прямо зараз👇🏻",
-                reply_markup=create_format_keyboard()
-            )
-            return CHOOSING_FORMAT
+                reply_markup=create_format_keyboard_NG(theme)
+                )
+                return CHOOSING_FORMAT
+            else:
+                await update.message.reply_text(
+                    "💰 Оберіть формат святкування та дізнайтесь ціни прямо зараз👇🏻",
+                    reply_markup=create_format_keyboard()
+                )
+                return CHOOSING_FORMAT
 
         return CHOOSING_THEME_DETAILS
 
@@ -1529,7 +1665,7 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         subtheme = next((choice['value'] for choice in reversed(user_choices) 
                         if choice['type'] == "Підтема"), None)
         
-        if subtheme:
+        if subtheme != '🎄 Новий рік':
             # --- Додаємо отримання міста для фото підтеми (BACK_BUTTON) ---
             city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
             photo_url = None
@@ -1556,6 +1692,37 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     reply_markup=create_theme_details_keyboard()
                 )
             return CHOOSING_THEME_DETAILS
+        elif subtheme == '🎄 Новий рік':
+            #Видаємо фото і клавіатуру деталей
+            # --- Додаємо отримання міста для фото підтеми ---
+            city = next((choice['value'] for choice in user_choices if choice['type'] == "Місто"), None)
+            event_type = next((choice['value'] for choice in user_choices if choice['type'] == "Тип події"), None)
+            # Отримуємо посилання на фото
+            photo_url = THEME_PHOTOS.get(city, {}).get('🎄 Новий рік', {}).get(theme)
+                    
+        
+            # Відправляємо фото з описом
+            if photo_url:
+                if os.path.exists(photo_url):
+                    with open(photo_url, 'rb') as photo:
+                        await update.message.reply_photo(
+                            photo=photo,
+                            caption=f"\n🎉 Чудовий вибір! 😍\nОберіть далі:",
+                            reply_markup=create_theme_details_keyboard()
+                        )
+                else:
+                    await update.message.reply_photo(
+                        photo=photo_url,
+                        caption=f"\nЧудовий вибір! 🌟\n👇 Оберіть далі:",
+                        reply_markup=create_theme_details_keyboard()
+                    )
+            else:
+                theme_info = THEME_INFO.get(theme, "")
+                await update.message.reply_text(
+                     f"🎉 Ви обрали тематику: {theme}\n\n{theme_info}\n\n👇 Оберіть конкретну тематику для незабутнього свята! 🥳",
+                    reply_markup=create_theme_keyboard()
+                )
+            return CHOOSING_THEME_DETAILS
         else:
             # Якщо підтеми немає, повертаємося до вибору підтеми
             await update.message.reply_text(
@@ -1565,7 +1732,7 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return CHOOSING_THEME2
     
     # --- ДОДАНО ЗАХИСТ ---
-    allowed_formats = ["⏰ Погодинно", "📦 Пакетні пропозиції", "🎯 Квести"]
+    allowed_formats = ["⏰ Погодинно", "📦 Пакетні пропозиції", "🎯 Квести",'⏰ Погодинно (до 30.12 включно)','🎆 Привітання 31.12','📦 Пакетні пропозиції']
     if text not in allowed_formats and text != BACK_BUTTON:
         await update.message.reply_text(
             "Будь ласка, оберіть формат з клавіатури!",
@@ -1576,7 +1743,25 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # Зберігаємо вибраний формат
     add_choice(context, "Формат", text)
-    
+
+    if text == '⏰ Погодинно (до 30.12 включно)':
+        # Визначаємо ключ для цін
+        price_key = event_type
+        # Показуємо погодинні ціни
+        await update.message.reply_text(
+                f"💰 Погодинні ціни для {event_type} у місті {city}",
+                reply_markup=create_hourly_price_keyboard(city, price_key)
+            )
+        return CHOOSING_HOURLY_PRICE
+
+    if text == '🎆 Привітання 31.12':
+        tematika= next((choice['value'] for choice in user_choices
+                        if choice['type'] == "Тематика"), None)
+        await update.message.reply_text(
+                    f"💰 Погодинні ціни для {event_type} у місті {city}",
+                    reply_markup=create_theam_privitanja31(city,tematika)
+                )
+        return PRIVITANJA_31_12
     # Якщо вибрано погодинний формат
     if text == "⏰ Погодинно":
         # Перевіряємо, чи це випускний або день народження
@@ -1617,7 +1802,7 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Якщо вибрано погодинний формат
     if text == "📦 Пакетні пропозиції":
         # Перевіряємо, чи це випускний або день народження
-        if event_type in ["🎂 День народження", "🎓 Випускний"]:
+        if event_type in ["🎂 День народження", "🎓 Випускний",'🎄 Новий рік']:
             # Показуємо пакетні пропозиції
             await update.message.reply_text(
                 f"📦 Пакетні пропозиції для {event_type} у місті {city}:",
@@ -1640,6 +1825,58 @@ async def format_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return CHOOSING_QWEST
         
     return CHOOSING_FORMAT
+
+async def privitanja_31 (update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        text = update.message.text
+        
+        # Отримуємо всі збережені вибори користувача
+        user_choices = context.user_data.get('choices', [])
+        logger.info(f"Поточні вибори користувача: {user_choices}")
+        
+        # Знаходимо місто та тип події
+        city = next((choice['value'] for choice in user_choices 
+                    if choice['type'] == "Місто"), None)
+        tematika = next((choice['value'] for choice in user_choices 
+                          if choice['type'] == "Тематика"), None)
+        
+        # Знаходимо вибрану локацію
+        location = next((choice['value'] for choice in user_choices 
+                        if choice['type'] == "Локація"), None)
+        if text == BACK_BUTTON:
+            # Повертаємося до вибору формату
+                theme = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тематика"), None)
+                await update.message.reply_text(
+                    "✨ Оберіть формат свята! 👇",
+                    reply_markup=create_format_keyboard_NG(theme)
+                )
+                return CHOOSING_FORMAT
+        if ":" in text:
+            price_name = text.split(":")[0].strip()
+            price_value = text.split(":")[1].strip()
+            
+            # Зберігаємо вибір ціни
+            add_choice(context, "Погодинна ціна", f"{price_name} - {price_value}")
+            # Відправляємо повідомлення про вибір
+            await update.message.reply_text(
+                f"🎉 Ви обрали: {price_name}\n"
+                f"💰 Вартість: {price_value}\n"
+            )
+            
+            # Показуємо фінальне меню формату   
+            await update.message.reply_text(
+                "Додати цей варіант до прорахунку?",
+                reply_markup=create_final_keyboard()
+            )
+            return CHOOSING_FINAL
+    except Exception as e:
+        logger.error(f"Помилка при обробці вибору 31/12: {str(e)}")
+        await update.message.reply_text(
+            "Виникла помилка. Будь ласка, спробуйте ще раз.",
+            reply_markup=create_theam_privitanja31()
+        )
+        return PRIVITANJA_31_12
 
 async def vipusk_pogodinno_chosen (update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
@@ -1709,12 +1946,22 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
             return CHOOSING_CITY
 
         if text == BACK_BUTTON:
-            # Повертаємося до вибору формату
-            await update.message.reply_text(
-                "✨ Оберіть формат свята! 👇",
-                reply_markup=create_format_keyboard()
-            )
-            return CHOOSING_FORMAT
+            if event_type=='🎄 Новий рік':
+                theme = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тематика"), None)
+                # Повертаємося до вибору формату
+                await update.message.reply_text(
+                    "✨ Оберіть формат свята! 👇",
+                    reply_markup=create_format_keyboard_NG(theme)
+                )
+                return CHOOSING_FORMAT
+            else:
+                # Повертаємося до вибору формату
+                await update.message.reply_text(
+                    "✨ Оберіть формат свята! 👇",
+                    reply_markup=create_format_keyboard()
+                )
+                return CHOOSING_FORMAT
 
         if text == CONTACT_MANAGER_BUTTON:
             # Відправляємо контакти менеджера
@@ -1741,7 +1988,8 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Додаємо інформацію про мінімальну тривалість для заміського комплексу
             min_duration_info = ""
             if is_tourbase:
-                min_duration_info = "\n❗️ Для заміського комплексу мінімальна тривалість - 2 години."
+                if event_type != "🎄 Новий рік":
+                    min_duration_info = "\n❗️ Для заміського комплексу мінімальна тривалість - 2 години."
             
             # Відправляємо повідомлення про вибір
             await update.message.reply_text(
@@ -1769,22 +2017,39 @@ async def hourly_price_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обробляє вибір пакету"""
-    text = update.message.text
-    
-    if text == BACK_BUTTON:
-        # Видаляємо останній формат, якщо він є
-        remove_choice_by_type(context, 'Формат')
-        remove_choice_by_type(context, 'Пакет')
-        await update.message.reply_text(
-            "🎉 Оберіть формат свята: 👇",
-            reply_markup=create_format_keyboard()
-        )
-        return CHOOSING_FORMAT
-    
     try:
         # Отримуємо всі збережені вибори користувача
         user_choices = context.user_data.get('choices', [])
         logger.info(f"Поточні вибори користувача: {user_choices}")
+        text = update.message.text
+    
+        if text == BACK_BUTTON:
+            logger.info('Бачимо кнопку назад.')
+            # Видаляємо останній формат, якщо він є
+            remove_choice_by_type(context, 'Формат')
+            remove_choice_by_type(context, 'Пакет')
+            typ_podii = next((choice['value'] for choice in user_choices 
+                      if choice['type'] == "Тип події"), None)
+            logger.info(f'typ_podii == {typ_podii}')
+
+            #Якщо тип події новий рік, повертаємось до клавіатури нового року
+            if typ_podii == "🎄 Новий рік":
+                    theme = next((choice['value'] for choice in reversed(user_choices) 
+                         if choice['type'] == "Тематика"), None)
+                    await update.message.reply_text(
+                    "💰 Оберіть формат святкування та дізнайтесь ціни прямо зараз👇🏻",
+                    reply_markup=create_format_keyboard_NG(theme)
+                    )
+                    return CHOOSING_FORMAT
+            #Інакше повертаємось до звичайної клавіатури
+            else:
+                    await update.message.reply_text(
+                    "🎉 Оберіть формат свята: 👇",
+                    reply_markup=create_format_keyboard()
+                    )
+                    return CHOOSING_FORMAT
+    
+    
         
         # Знаходимо місто та тип події
         city = next((choice['value'] for choice in user_choices 
@@ -1819,6 +2084,7 @@ async def package_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Отримуємо шлях до фото пакету
         photo_path = PAKET_PHOTOS[city][event_type][text]
         opis = PAKET_OPIS[city][event_type][text]
+        logger.info('Шлях до пакету знайдено')
         
         # Перевіряємо наявність файлу
         if os.path.exists(photo_path):
@@ -1934,11 +2200,7 @@ async def qwest_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
         if text == BACK_BUTTON:
             # Повертаємося до вибору квесту
             city = context.user_data.get('selected_city')
-            if not city:
-                # Якщо місто не знайдено в context.user_data, пробуємо знайти в choices
-                city = next((choice['value'] for choice in user_choices 
-                           if choice['type'] == "Місто"), None)
-            
+                      
             if not city:
                 await update.message.reply_text("Будь ласка, спочатку виберіть місто.")
                 return ConversationHandler.END
@@ -2053,7 +2315,7 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             return CHOOSING_QWEST
         elif last_choice['type'] == 'Пакет':
             # Перевіряємо, чи це випускний або день народження
-            if event_type in ["🎂 День народження", "🎓 Випускний"]:
+            if event_type in ["🎂 День народження", "🎓 Випускний",'🎄 Новий рік']:
                 # Показуємо пакетні пропозиції
                 await update.message.reply_text(
                     f"📦 Пакетні пропозиції для {event_type} у місті {city}:",
@@ -2063,22 +2325,30 @@ async def final_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
         elif last_choice['type'] == 'Погодинна ціна':
             # Перевіряємо, чи це випускний або день народження
-            if event_type in ["🎂 День народження", "🎓 Випускний"]:
+            is_tourbase = location and "🏰 Заміський комплекс" in location
+            if event_type in ["🎂 День народження", "🎓 Випускний",'🎄 Новий рік']:
                 # Перевіряємо, чи це заміський комплекс
                 is_tourbase = location and "🏰 Заміський комплекс" in location
                 
                 # Визначаємо ключ для цін
                 price_key = event_type
-            if is_tourbase:
-                price_key = f"{event_type} (турбаза)"
+                if is_tourbase:
+                    price_key = f"{event_type} (турбаза)"
             
             # Показуємо погодинні ціни
-            await update.message.reply_text(
-                f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
-                ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
-                reply_markup=create_hourly_price_keyboard(city, price_key)
-            )
-            return CHOOSING_HOURLY_PRICE
+            if event_type =='🎄 Новий рік':
+                await update.message.reply_text(
+                    f"💰 Погодинні ціни для {event_type} у місті {city}",
+                    reply_markup=create_hourly_price_keyboard(city, price_key)
+                )
+                return CHOOSING_HOURLY_PRICE
+            else:
+                await update.message.reply_text(
+                    f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
+                    ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
+                    reply_markup=create_hourly_price_keyboard(city, price_key)
+                )
+                return CHOOSING_HOURLY_PRICE
             
     elif text == WOW_BUTTON:
         # Показуємо меню додаткових послуг
@@ -2195,8 +2465,9 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                 )
                 return CHOOSING_QWEST
             elif last_choice['type'] == 'Пакет':
+
                 # Перевіряємо, чи це випускний або день народження
-                if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                if event_type in ["🎂 День народження", "🎓 Випускний",'🎄 Новий рік']:
                     # Показуємо пакетні пропозиції
                     await update.message.reply_text(
                         f"📦 Пакетні пропозиції для {event_type} у місті {city}:",
@@ -2205,23 +2476,29 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                     return CHOOSING_PACKAGE
 
             elif last_choice['type'] == 'Погодинна ціна':
+                # Підготовка значень, щоб уникнути UnboundLocalError
+                is_tourbase = bool(location and "🏰 Заміський комплекс" in location)
+                price_key = event_type  # за замовчуванням ключ цін
+
                 # Перевіряємо, чи це випускний або день народження
-                if event_type in ["🎂 День народження", "🎓 Випускний"]:
+                if event_type in ["🎂 День народження", "🎓 Випускний", '🎄 Новий рік']:
                     # Перевіряємо, чи це заміський комплекс
                     is_tourbase = location and "🏰 Заміський комплекс" in location
-                    
-                    # Визначаємо ключ для цін
-                    price_key = event_type
-                if is_tourbase:
-                    price_key = f"{event_type} (турбаза)"
-                
-                # Показуємо погодинні ціни
-                await update.message.reply_text(
-                    f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
-                    ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
-                    reply_markup=create_hourly_price_keyboard(city, price_key)
-                )
-                return CHOOSING_HOURLY_PRICE
+                    if is_tourbase:
+                        price_key = f"{event_type} (турбаза)"
+                if event_type !='🎄 Новий рік':
+                    await update.message.reply_text(
+                        f"💰 Погодинні ціни для {event_type} у місті {city}\n\n" + 
+                        ("❗️УВАГА! Формування замовлення, для святкування в заміському комплексі, передбачає тривалість свята мінімум від двох годин" if is_tourbase else ""),
+                        reply_markup=create_hourly_price_keyboard(city, price_key)
+                    )
+                    return CHOOSING_HOURLY_PRICE
+                else:
+                    await update.message.reply_text(
+                        f"💰 Погодинні ціни для {event_type} у місті {city}",
+                        reply_markup=create_hourly_price_keyboard(city, price_key)
+                    )
+                    return CHOOSING_HOURLY_PRICE
 
         # --- Показати вибрані послуги ---
         #if text == SHOW_SELECTED_SERVICES_BUTTON:
@@ -2418,7 +2695,7 @@ async def additional_services_chosen(update: Update, context: ContextTypes.DEFAU
                                 context.user_data['additional_services'][service] = []
                             if text not in context.user_data['additional_services'][service]:
                                 context.user_data['additional_services'][service].append(text)
-                            desc = ADDITIONAL_SERVICES_DESCRIPTIONS.get(city, {}).get(service, "")
+                            desc = ADDITIONAL_SERVICES_WITH_SUBMENU.get(city, {}).get(service, "")
                             await update.message.reply_text(
                                 f"{opis} \n"
                                 f"{text} для послуги '{service}' додано до вашого вибору! 🎁\n{desc}",
@@ -3190,6 +3467,7 @@ def main():
             CHOOSING_THEME_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, theme_details_chosen)],
             CHOOSING_FORMAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, format_chosen)],
             CHOOSING_HOURLY_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, hourly_price_chosen)],
+            PRIVITANJA_31_12: [MessageHandler(filters.TEXT & ~filters.COMMAND, hourly_price_chosen)],
             VIPUSK_POGODINNO: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, vipusk_pogodinno_chosen),
                 MessageHandler(filters.CONTACT, vipusk_pogodinno_chosen),],
