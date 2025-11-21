@@ -3290,10 +3290,12 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("⛔ Доступ заборонено")
         return
     if not context.args and not update.message.reply_to_message:
-        await update.message.reply_text("Введіть текст або зробіть reply до повідомлення з файлом/медіа!")
+        await update.message.reply_text("Зробіть reply до повідомлення з файлом/медіа та підписом під ним!")
         return
-    msg_text = ' '.join(context.args)
     media_msg = update.message.reply_to_message
+    if not media_msg:
+        await update.message.reply_text("Зробіть reply до повідомлення з файлом/медіа та підписом під ним!")
+        return
 
     # Створюємо семафор для обмеження паралельних запитів
     semaphore = Semaphore(5)
@@ -3301,22 +3303,15 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
     async def send_message_to_user(chat_id):
         async with semaphore:
             try:
-                # Відправляємо текст
-                if msg_text.strip() and not media_msg:
-                    await context.bot.send_message(chat_id=chat_id, text=msg_text, parse_mode='HTML')
-                
-                # Відправляємо медіа з replied повідомлення
                 if media_msg:
-                    if media_msg.photo:
-                        await context.bot.send_photo(chat_id=chat_id, photo=media_msg.photo[-1].file_id, caption=msg_text or None)
-                    if media_msg.document:
-                        await context.bot.send_document(chat_id=chat_id, document=media_msg.document.file_id, caption=msg_text or None)
-                    if media_msg.video:
-                        await context.bot.send_video(chat_id=chat_id, video=media_msg.video.file_id, caption=msg_text or None)
-                    if media_msg.audio:
-                        await context.bot.send_audio(chat_id=chat_id, audio=media_msg.audio.file_id, caption=msg_text or None)
-                
-                return True
+                    # Копіюємо оригінальне повідомлення менеджера 1-в-1
+                    res = await context.bot.copy_message(
+                        chat_id=chat_id,
+                        from_chat_id=update.effective_chat.id,
+                        message_id=media_msg.message_id
+                    )
+                    user_data.set_last_broadcast_message(chat_id, res.message_id)
+                    return True
             except Exception as e:
                 print(f"Помилка надсилання для {chat_id}: {e}")
                 return False
@@ -3367,6 +3362,39 @@ async def broadcast_all_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     await update.message.reply_text(final_message)
 
+async def delete_last_broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [MANAGER_CHAT_ID_KIEV, MANAGER_CHAT_ID_KR]:
+        await update.message.reply_text("⛔ Доступ заборонено")
+        return
+
+    from asyncio import Semaphore
+    sem = Semaphore(5)
+    deleted = 0
+    failed = 0
+
+    async def delete_one(cid, mid):
+        nonlocal deleted, failed
+        async with sem:
+            try:
+                await context.bot.delete_message(chat_id=cid, message_id=mid)
+                deleted += 1
+            except Exception:
+                failed += 1
+
+    pairs = list(user_data.iter_last_broadcast_pairs())
+    if not pairs:
+        await update.message.reply_text("Немає збережених останніх повідомлень для видалення.")
+        return
+
+    await asyncio.gather(*[delete_one(cid, mid) for cid, mid in pairs])
+
+    # Опційно: очистити мітки після видалення
+    user_data.clear_last_broadcast()
+
+    await update.message.reply_text(f"🗑 Видалення останньої розсилки:\n✅ Успішно: {deleted}\n❌ Помилок: {failed}")
+
+
 async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Звернення до конкретного користувача: /hello ID повідомлення (тільки для менеджера)"""
     user_id = update.effective_user.id
@@ -3388,6 +3416,8 @@ async def hello_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("✅ Надіслано!")
     except Exception as e:
         await update.message.reply_text(f"❌ Не вдалося: {e}")
+
+
 
 # --- Надсилання підсумку менеджеру ---
 async def send_summary_to_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3494,6 +3524,7 @@ def main():
     application.add_handler(CommandHandler('users', export_users_command))
     application.add_handler(CommandHandler('all', broadcast_all_command))
     application.add_handler(CommandHandler('hello', hello_user_command))
+    application.add_handler(CommandHandler('delall', delete_last_broadcast_command))
     application.run_polling()
 
 if __name__ == '__main__':
