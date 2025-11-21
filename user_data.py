@@ -68,19 +68,28 @@ class UserData:
     def _create_indexes(self):
         """Створення індексів для колекцій"""
         try:
-            # Індекси для користувачів
-            self.users_collection.create_index(
-                [('user_id', 1)],
-                unique=True,
-                partialFilterExpression={'user_id': {'$type': 'number'}}
-            )
-            
-            # Індекси для розмов
-            self.conversations.create_index(
-                [('user_id', 1)],
-                unique=True,
-                partialFilterExpression={'user_id': {'$type': 'number'}}
-            )
+            if self.users_collection is not None:
+                # Індекси для users
+                self.users_collection.create_index(
+                    [('user_id', 1)],
+                    unique=True,
+                    partialFilterExpression={'user_id': {'$type': 'number'}}
+                )
+                # Унікальний chat_id (sparse, щоб дозволити документи без chat_id)
+                self.users_collection.create_index(
+                    [('chat_id', 1)],
+                    unique=True,
+                    sparse=True
+                )
+
+            if self.conversations is not None:
+                # Індекси для conversations
+                self.conversations.create_index(
+                    [('user_id', 1)],
+                    unique=True,
+                    partialFilterExpression={'user_id': {'$type': 'number'}}
+                )
+
             logger.info("Індекси успішно створено")
         except Exception as e:
             logger.error(f"Помилка створення індексів: {str(e)}")
@@ -247,6 +256,80 @@ class UserData:
         except Exception as e:
             logger.error(f"Помилка отримання користувача: {str(e)}")
             return None
+
+    def set_last_broadcast_message(self, chat_id: int, message_id: int) -> None:
+        try:
+            if self.users_collection is not None and self.ensure_connected():
+                # upsert за chat_id
+                self.users_collection.update_one(
+                    {'chat_id': int(chat_id)},
+                    {'$set': {
+                        'chat_id': int(chat_id),
+                        'last_broadcast_message_id': int(message_id),
+                        'last_update': datetime.now().isoformat()
+                    }},
+                    upsert=True
+                )
+            # Оновлення в пам'яті (локально)
+            found = False
+            for uid, info in self.users.items():
+                if info.get('chat_id') == int(chat_id):
+                    info['last_broadcast_message_id'] = int(message_id)
+                    self.users[uid] = info
+                    found = True
+                    break
+            if not found:
+                uid = str(chat_id)  # мінімальний запис, якщо не було
+                self.users[uid] = {
+                    '_id': uid,
+                    'user_id': chat_id,
+                    'chat_id': int(chat_id),
+                    'last_broadcast_message_id': int(message_id),
+                    'created_at': datetime.now().isoformat(),
+                    'last_update': datetime.now().isoformat()
+                }
+            if not (self.users_collection and self.ensure_connected()):
+                self.save_data()
+        except Exception as e:
+            logger.error(f"[LAST_BROADCAST] set error: {e}")
+
+    def iter_last_broadcast_pairs(self):
+        """Пари (chat_id, last_broadcast_message_id) для всіх, де такий є."""
+        try:
+            if self.users_collection is not None and self.ensure_connected():
+                cursor = self.users_collection.find(
+                    {'last_broadcast_message_id': {'$exists': True}}
+                )
+                for doc in cursor:
+                    cid = doc.get('chat_id')
+                    mid = doc.get('last_broadcast_message_id')
+                    if cid is not None and mid is not None:
+                        yield int(cid), int(mid)
+            else:
+                for _, info in self.users.items():
+                    cid = info.get('chat_id')
+                    mid = info.get('last_broadcast_message_id')
+                    if cid is not None and mid is not None:
+                        yield int(cid), int(mid)
+        except Exception as e:
+            logger.error(f"[LAST_BROADCAST] iter error: {e}")
+
+    def clear_last_broadcast(self):
+        """Очистити поле останньої розсилки у всіх (опційно)."""
+        try:
+            if self.users_collection is not None and self.ensure_connected():
+                self.users_collection.update_many(
+                    {'last_broadcast_message_id': {'$exists': True}},
+                    {'$unset': {'last_broadcast_message_id': ""}}
+                )
+            for uid, info in self.users.items():
+                if 'last_broadcast_message_id' in info:
+                    info.pop('last_broadcast_message_id', None)
+                    self.users[uid] = info
+            if not (self.users_collection and self.ensure_connected()):
+                self.save_data()
+        except Exception as e:
+            logger.error(f"[LAST_BROADCAST] clear error: {e}")
 
 # Створення глобального екземпляра
 mongo_uri = os.getenv('MONGODB_URI')
