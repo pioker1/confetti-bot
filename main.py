@@ -709,7 +709,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Відправляємо привітання з новою клавіатурою
     await update.message.reply_text(
         Hello_World,
-        reply_markup=create_city_keyboard()
+        reply_markup=create_city_keyboard(), parse_mode='HTML'
     )
     logger.info(f"[START] Завершено start для user_id={update.effective_user.id}")
     return CHOOSING_CITY
@@ -3102,7 +3102,7 @@ async def summary_chosen_contact_phone(update: Update, context: ContextTypes.DEF
             context.user_data.clear()
             await update.message.reply_text(
                 Hello_World,
-                reply_markup=create_city_keyboard()
+                reply_markup=create_city_keyboard(), parse_mode='HTML'
             )
             return CHOOSING_CITY
 
@@ -3195,7 +3195,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Якщо немає збереженого стану, показуємо меню вибору міст
         await update.message.reply_text(
             Hello_World,
-            reply_markup=create_city_keyboard()
+            reply_markup=create_city_keyboard(), parse_mode='HTML'
         )
         return CHOOSING_CITY
     
@@ -3225,7 +3225,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Якщо не вдалося визначити стан, починаємо з початку
         await update.message.reply_text(
             Hello_World,
-            reply_markup=create_city_keyboard()
+            reply_markup=create_city_keyboard(), parse_mode='HTML'
         )
         return CHOOSING_CITY
 
@@ -3529,3 +3529,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
