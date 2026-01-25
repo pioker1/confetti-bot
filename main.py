@@ -1188,8 +1188,11 @@ async def location_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             remove_choice_by_type(context, 'Локація')
             remove_choice_by_type(context, 'Тип події')
             await update.message.reply_text(
-                "Оберіть, яку подію будете святкувати🥳:",
-                reply_markup=create_event_type_keyboard()
+        "🥳 <b>Оберіть, яку подію ви будете святкувати</b>/n/n"
+        "Команда <b>CONFETTI</b> має великий досвід у проведенні свят <b>різного формату та масштабу</b> - від камерних домашніх вечірок до великих заходів у школах, садочках, ресторанах та на відкритих локаціях./n/n"
+        "Кожне свято ми створюємо з урахуванням віку дітей, формату події та ваших побажань - щоб результат перевершив очікування 💫/n/n"
+        "Оберіть подію нижче, і наш бот допоможе вам підібрати найкращий варіант святкової програми ",
+                reply_markup=create_event_type_keyboard(), parse_mode='HTML'
             )
             return CHOOSING_EVENT_TYPE
 
@@ -3208,8 +3211,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Відновлюємо відповідний стан на основі останнього вибору
     if last_choice['type'] == "Місто":
         await update.message.reply_text(
-            "Оберіть, яку подію будете святкувати🥳:",
-            reply_markup=create_event_type_keyboard()
+        "🥳 <b>Оберіть, яку подію ви будете святкувати</b>/n/n"
+        "Команда <b>CONFETTI</b> має великий досвід у проведенні свят <b>різного формату та масштабу</b> - від камерних домашніх вечірок до великих заходів у школах, садочках, ресторанах та на відкритих локаціях./n/n"
+        "Кожне свято ми створюємо з урахуванням віку дітей, формату події та ваших побажань - щоб результат перевершив очікування 💫/n/n"
+        "Оберіть подію нижче, і наш бот допоможе вам підібрати найкращий варіант святкової програми ",
+            reply_markup=create_event_type_keyboard(), parse_mode='HTML'
         )
         return CHOOSING_EVENT_TYPE
     elif last_choice['type'] == "Тип події":
@@ -3532,5 +3538,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
