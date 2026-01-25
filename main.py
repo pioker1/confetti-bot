@@ -822,11 +822,31 @@ async def event_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return CHOOSING_EVENT_TYPE_Sim_svjata
         
         # Для Дня народження та Випускного показуємо вибір локації
-        elif '🎂 День народження' in event_type or '🎓 Випускний' in event_type or '🎄 Новий рік' in event_type:
+        elif '🎂 День народження' in event_type:
             # Зберігаємо вибір типу події тільки для основних подій
             add_choice(context, "Тип події", event_type)
             await update.message.reply_text(
-                "Оберіть місце, де хотіли б святкувати🎊:",
+                "День, коли хочеться максимум радості, сміху та уваги для іменинника 🥳\n"
+                "Ми підлаштуємо програму під вік дитини та формат свята - залишилось лише обрати, де саме ви плануєте святкувати 💫",
+                reply_markup=create_location_keyboard(event_type)
+            )
+            return CHOOSING_LOCATION
+        elif '🎓 Випускний' in event_type:
+            # Зберігаємо вибір типу події тільки для основних подій
+            add_choice(context, "Тип події", event_type)
+            await update.message.reply_text(
+                "Святкова атмосфера, радість дітей і спокій батьків 🎊\n"
+                "Оберіть, де саме планується випускний, і ми запропонуємо найкращий варіант програми.",
+                reply_markup=create_location_keyboard(event_type)
+            )
+            return CHOOSING_LOCATION
+        
+        elif '🎄 Новий рік' in event_type:
+            # Зберігаємо вибір типу події тільки для основних подій
+            add_choice(context, "Тип події", event_type)
+            await update.message.reply_text(
+                "Час, коли здійснюються бажання і діти щиро радіють святу🎅\n"
+                "Оберіть місце проведення, і ми продумаємо все до дрібниць - від атмосфери до яскравих емоцій, які запам’ятаються надовго 🎄",
                 reply_markup=create_location_keyboard(event_type)
             )
             return CHOOSING_LOCATION
@@ -3538,6 +3558,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
